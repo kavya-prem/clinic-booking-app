@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <!-- Lets iPhones add this to the Home Screen like an app -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Clinic booking">
+    <title>Clinic booking</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="wrap">
+      <p id="banner" class="banner" role="alert" hidden></p>
+
+      <!-- Shown while the page checks whether this device is logged in -->
+      <section id="screen-loading" class="card">
+        <p class="muted">Loading…</p>
+      </section>
+
+      <!-- PIN screen -->
+      <section id="screen-pin" class="card" hidden>
+        <h1>Clinic booking</h1>
+        <form id="pin-form" autocomplete="off" novalidate>
+          <label for="pin">Enter your PIN</label>
+          <input id="pin" type="password" inputmode="numeric" pattern="[0-9]*"
+                 maxlength="4" autocomplete="off" class="pin-input">
+          <p id="pin-msg" class="msg" role="alert"></p>
+          <button type="submit" id="pin-btn" class="btn primary">Log in</button>
+        </form>
+      </section>
+
+      <!-- Correct PIN, but this device is not approved yet -->
+      <section id="screen-pending" class="card" hidden>
+        <h1>Waiting for approval</h1>
+        <p>This device needs the admin's approval before it can be used. The admin has been sent an email.</p>
+        <p>Once it is approved, tap <strong>Check again</strong>.</p>
+        <p id="pending-msg" class="msg" role="alert"></p>
+        <button id="pending-check" class="btn primary">Check again</button>
+        <button id="pending-back" class="btn link">Use a different PIN</button>
+      </section>
+
+      <!-- Logged in (the day view replaces this in milestone 3) -->
+      <section id="screen-home" class="card" hidden>
+        <h1>Clinic booking</h1>
+        <p>Logged in as <strong id="home-role"></strong></p>
+        <p class="muted">The day view comes in milestone 3.</p>
+        <button id="btn-devices" class="btn" hidden>
+          Devices <span id="badge" class="badge" hidden></span>
+        </button>
+        <button id="btn-logout" class="btn">Log out</button>
+      </section>
+
+      <!-- Admin only: approve, reject and remove devices -->
+      <section id="screen-devices" class="card" hidden>
+        <div class="row-between">
+          <h1>Devices</h1>
+          <button id="devices-back" class="btn link">← Back</button>
+        </div>
+        <p id="devices-msg" class="msg ok" role="status"></p>
+
+        <h2>Waiting for approval</h2>
+        <ul id="list-pending" class="list"></ul>
+        <p id="none-pending" class="muted">No devices waiting.</p>
+
+        <h2>All devices</h2>
+        <ul id="list-devices" class="list"></ul>
+
+        <button id="btn-logout-all" class="btn danger">Log out all other devices</button>
+      </section>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
