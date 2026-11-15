@@ -10,6 +10,8 @@
     --warn-bg: #fff4e5;
   }
   * { box-sizing: border-box; }
+  /* Anything marked hidden stays hidden, even if another rule says to show it. */
+  [hidden] { display: none !important; }
   body {
     font-family: system-ui, -apple-system, sans-serif;
     margin: 0;
