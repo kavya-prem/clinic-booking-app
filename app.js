@@ -80,7 +80,7 @@
   }
 
   function show(name) {
-    ['loading', 'pin', 'pending', 'day', 'devices'].forEach(function (n) {
+    ['loading', 'pin', 'pending', 'day', 'book', 'devices'].forEach(function (n) {
       $('screen-' + n).hidden = (n !== name);
     });
   }
@@ -351,6 +351,10 @@
     $('day-prev').disabled = index === 0;
     $('day-next').disabled = index === data.days.length - 1;
     $('day-today').hidden = isToday;
+    $('day-walkin').hidden = !(isToday && day.open);
+    // A message belongs to the day it was shown on.
+    if (view.shownDate && view.shownDate !== day.date) $('day-msg').textContent = '';
+    view.shownDate = day.date;
     // Edit is offered on working days and on days that already have changes.
     $('day-edit').hidden = !(day.workingDay || day.custom);
     if (editState.date && editState.date !== day.date) closeEdit();
@@ -373,7 +377,9 @@
       // Rows with a booking are always shown.
       var empty = row.kind === 'free' || row.kind === 'unavailable';
       if (isToday && empty && toMinutes(row.time) <= now) return;
-      list.appendChild(slotRow(row));
+      var li = slotRow(row);
+      if (row.kind === 'free') makeBookable(li, day.date, row.time);
+      list.appendChild(li);
       shown++;
     });
 
@@ -425,6 +431,159 @@
     view.date = known ? picked : view.data.today;
     renderDay();
   });
+
+  /* ---------- New booking ---------- */
+
+  var booking = { draft: null, saving: false };
+
+  /** A free slot row: tap it (or press Enter) to book it. */
+  function makeBookable(li, date, time) {
+    li.tabIndex = 0;
+    li.setAttribute('role', 'button');
+    li.setAttribute('aria-label', 'Book ' + to12h(time));
+    li.appendChild(textEl('span', 'Book ›', 'slot-book'));
+    li.addEventListener('click', function () { openBooking(date, time, 'phone'); });
+    li.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') openBooking(date, time, 'phone');
+    });
+  }
+
+  function showBookPart(part) {
+    $('book-form').hidden = part !== 'form';
+    $('book-confirm').hidden = part !== 'confirm';
+    $('book-done').hidden = part !== 'done';
+  }
+
+  function openBooking(date, time, channel) {
+    var day = view.data.days.filter(function (d) { return d.date === date; })[0];
+    booking.draft = { date: date, time: time };
+    $('book-title').textContent = channel === 'walk-in' ? 'Walk-in' : 'New booking';
+    $('book-slot').textContent = (day ? day.label : date) + ', ' + to12h(time);
+    $('book-name').value = '';
+    $('book-mobile').value = '';
+    $('book-comments').value = '';
+    $('book-count').textContent = '0 / 200';
+    $('book-msg').textContent = '';
+    var reasons = $('book-reason');
+    reasons.textContent = '';
+    reasons.appendChild(new Option('Pick a reason', ''));
+    (view.data.reasons || []).forEach(function (r) { reasons.appendChild(new Option(r, r)); });
+    document.querySelector('input[name="book-channel"][value="' + channel + '"]').checked = true;
+    showBookPart('form');
+    show('book');
+    window.scrollTo(0, 0);
+    $('book-name').focus();
+  }
+
+  function backToDay(message) {
+    show('day');
+    $('day-msg').textContent = message || '';
+    loadDay();
+  }
+
+  /** Walk-in: today's next free slot (one that hasn't started yet). */
+  $('day-walkin').addEventListener('click', function () {
+    var today = view.data.days.filter(function (d) { return d.date === view.data.today; })[0];
+    var now = nowInIndia().minutes;
+    var next = today && today.rows.filter(function (r) {
+      return r.kind === 'free' && toMinutes(r.time) > now;
+    })[0];
+    if (!next) {
+      $('day-msg').textContent = 'No free slots left today. Pick another day, or add an extra booking (coming in milestone 6).';
+      return;
+    }
+    openBooking(today.date, next.time, 'walk-in');
+  });
+
+  $('book-comments').addEventListener('input', function () {
+    $('book-count').textContent = $('book-comments').value.length + ' / 200';
+  });
+
+  /** Step 1 → 2: the server checks the details and sends back any warnings. */
+  $('book-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var draft = {
+      date: booking.draft.date,
+      time: booking.draft.time,
+      name: $('book-name').value.trim(),
+      mobile: $('book-mobile').value.trim(),
+      reason: $('book-reason').value,
+      comments: $('book-comments').value.trim(),
+      channel: document.querySelector('input[name="book-channel"]:checked').value
+    };
+    if (!draft.name) { $('book-msg').textContent = 'Enter the patient\'s name.'; return; }
+    if (!draft.reason) { $('book-msg').textContent = 'Pick a visit reason.'; return; }
+    $('book-msg').textContent = '';
+    busy($('book-next'), true);
+    call('checkBooking', state.token, state.deviceId, draft)
+      .then(function (r) {
+        booking.draft = draft;
+        showConfirm(r.booking, r.warnings);
+      })
+      .catch(function (err) { bookingError(err, $('book-msg')); })
+      .then(function () { busy($('book-next'), false); });
+  });
+
+  function showConfirm(b, warnings) {
+    $('confirm-mobile').textContent = b.mobile ? b.mobile.replace(/(\d{5})(\d+)/, '$1 $2') : 'No number';
+    var mw = $('confirm-mobile-warning');
+    mw.hidden = !warnings.mobile;
+    mw.textContent = warnings.mobile === 'missing'
+      ? 'You have not entered the mobile number. Go back and enter it if you can.'
+      : 'This number doesn\'t look like a 10-digit Indian mobile number. Please check it.';
+    var up = $('confirm-upcoming');
+    up.hidden = warnings.upcoming.length === 0;
+    up.textContent = 'This number already has ' + warnings.upcoming.length + ' upcoming booking' +
+      (warnings.upcoming.length === 1 ? '' : 's') + ': ' + warnings.upcoming.map(function (u) {
+        return u.dateLabel + ' ' + to12h(u.time);
+      }).join(', ') + '. You can still save.';
+
+    var dl = $('confirm-details');
+    dl.textContent = '';
+    [['Patient', b.name], ['When', b.dateLabel + ', ' + to12h(b.time)], ['Reason', b.reason],
+     ['How', b.channel === 'walk-in' ? 'Walk-in' : 'Phone call'], ['Comments', b.comments || '–']]
+      .forEach(function (pair) {
+        dl.appendChild(textEl('dt', pair[0]));
+        dl.appendChild(textEl('dd', pair[1]));
+      });
+    $('confirm-save').textContent = warnings.mobile ? 'Save anyway' : 'Save booking';
+    $('confirm-msg').textContent = '';
+    showBookPart('confirm');
+    window.scrollTo(0, 0);
+  }
+
+  /** Step 2 → 3: save. The server checks the slot is still free, inside a lock. */
+  $('confirm-save').addEventListener('click', function () {
+    if (booking.saving) return;
+    booking.saving = true;
+    busy($('confirm-save'), true);
+    call('createBooking', state.token, state.deviceId, booking.draft)
+      .then(function (r) {
+        if (!r.ok && r.reason === 'slot_taken') {
+          backToDay('This slot was just taken. Pick another.');
+          return;
+        }
+        $('done-id').textContent = 'Booked: ' + r.id;
+        $('done-text').textContent = r.name + ', ' + r.dateLabel + ' at ' + to12h(r.time) + '.';
+        showBookPart('done');
+      })
+      .catch(function (err) { bookingError(err, $('confirm-msg')); })
+      .then(function () {
+        booking.saving = false;
+        busy($('confirm-save'), false);
+      });
+  });
+
+  /** Booking errors show next to the form. A lost login still goes to the PIN screen. */
+  function bookingError(err, el) {
+    var message = (err && err.message) || String(err);
+    if (message.indexOf('NOT_LOGGED_IN') !== -1) { handleError(err); return; }
+    el.textContent = message;
+  }
+
+  $('confirm-edit').addEventListener('click', function () { showBookPart('form'); });
+  $('book-back').addEventListener('click', function () { backToDay(''); });
+  $('done-back').addEventListener('click', function () { backToDay(''); });
 
   /* ---------- Edit day ---------- */
 

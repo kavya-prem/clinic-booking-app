@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Clinic booking">
     <title>Clinic booking</title>
-    <link rel="stylesheet" href="styles.css?v=20261115151411">
+    <link rel="stylesheet" href="styles.css?v=20261115155451">
   </head>
   <body>
     <main class="wrap">
@@ -64,6 +64,7 @@
           </div>
           <div class="day-actions">
             <button id="day-today" class="btn small" hidden>Back to today</button>
+            <button id="day-walkin" class="btn small primary" hidden>Walk-in</button>
             <button id="day-edit" class="btn small" hidden>Edit day</button>
           </div>
           <p id="day-msg" class="msg ok" role="status"></p>
@@ -130,6 +131,59 @@
         </div>
       </section>
 
+      <!-- New booking: form → confirm → booked -->
+      <section id="screen-book" class="card" hidden>
+        <div class="row-between">
+          <h1 id="book-title">New booking</h1>
+          <button id="book-back" class="btn link">← Day view</button>
+        </div>
+        <p id="book-slot" class="book-slot"></p>
+
+        <form id="book-form" novalidate>
+          <label for="book-name">Patient name</label>
+          <input id="book-name" class="text-input" maxlength="60" autocomplete="off"
+                 placeholder="The patient's name, even if someone else is calling">
+
+          <label for="book-mobile">Mobile number</label>
+          <input id="book-mobile" class="text-input" type="tel" inputmode="numeric" maxlength="16"
+                 autocomplete="off" placeholder="10 digits">
+
+          <label for="book-reason">Visit reason</label>
+          <select id="book-reason" class="text-input"></select>
+
+          <label for="book-comments">Comments (optional)</label>
+          <textarea id="book-comments" class="text-input" rows="2" maxlength="200"
+                    placeholder="Practical notes only. No symptoms or diagnoses"></textarea>
+          <p id="book-count" class="muted small-right"></p>
+
+          <fieldset class="scope">
+            <legend class="field-label">How did they book?</legend>
+            <label><input type="radio" name="book-channel" value="phone" checked> Phone call</label>
+            <label><input type="radio" name="book-channel" value="walk-in"> Walk-in</label>
+          </fieldset>
+
+          <p id="book-msg" class="msg" role="alert"></p>
+          <button type="submit" id="book-next" class="btn primary">Next</button>
+        </form>
+
+        <div id="book-confirm" hidden>
+          <p class="muted">Check the details. Read the number back to the caller.</p>
+          <p id="confirm-mobile" class="big-mobile"></p>
+          <p id="confirm-mobile-warning" class="warn-box" hidden></p>
+          <p id="confirm-upcoming" class="warn-box soft" hidden></p>
+          <dl id="confirm-details" class="details"></dl>
+          <p id="confirm-msg" class="msg" role="alert"></p>
+          <button id="confirm-save" class="btn primary">Save booking</button>
+          <button id="confirm-edit" class="btn">Change details</button>
+        </div>
+
+        <div id="book-done" hidden>
+          <p class="done-id" id="done-id"></p>
+          <p id="done-text"></p>
+          <button id="done-back" class="btn primary">Back to the day</button>
+        </div>
+      </section>
+
       <!-- Admin only: approve, reject and remove devices -->
       <section id="screen-devices" class="card" hidden>
         <div class="row-between">
@@ -149,7 +203,7 @@
       </section>
     </main>
 
-    <script src="config.js?v=20261115151411"></script>
-    <script src="app.js?v=20261115151411"></script>
+    <script src="config.js?v=20261115155451"></script>
+    <script src="app.js?v=20261115155451"></script>
   </body>
 </html>

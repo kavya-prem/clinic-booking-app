@@ -203,6 +203,38 @@
   a.btn { text-decoration: none; text-align: center; }
   .btn.whatsapp { background: #1f9d55; border-color: #1f9d55; color: #fff; }
 
+  /* ---------- New booking ---------- */
+  .slot.free { cursor: pointer; }
+  .slot.free:hover, .slot.free:focus { background: #f0f8f2; outline: none; }
+  .slot-book { margin-left: auto; color: var(--primary); font-weight: 600; font-size: 14px; }
+  .book-slot { font-size: 18px; font-weight: 700; margin: 4px 0 16px; }
+  #book-form label, .field-label { display: block; font-weight: 600; margin: 14px 0 0; }
+  #book-form .scope label { font-weight: 400; margin: 8px 0; }
+  .small-right { text-align: right; margin: 2px 0 0; font-size: 12px; }
+  textarea.text-input { resize: vertical; font-family: inherit; }
+  .big-mobile {
+    font-size: clamp(26px, 9vw, 40px);  /* as big as fits on one line */
+    font-weight: 800;
+    letter-spacing: 2px;
+    white-space: nowrap;
+    text-align: center;
+    margin: 12px 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .warn-box {
+    background: #fde8e8;
+    color: var(--danger);
+    border-radius: 8px;
+    padding: 12px;
+    font-weight: 600;
+  }
+  .warn-box.soft { background: var(--warn-bg); color: #7a4a00; }
+  .details { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 16px 0; }
+  .details dt { color: var(--muted); }
+  .details dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+  .done-id { font-size: 32px; font-weight: 800; color: var(--ok); text-align: center; margin: 16px 0 4px; }
+  #done-text { text-align: center; }
+
   .pill.booked { background: #e8f0fe; color: var(--primary); }
   .pill.arrived { background: #e3f4e8; color: var(--ok); }
   .pill.extra { background: var(--warn-bg); color: #9a5b00; }
