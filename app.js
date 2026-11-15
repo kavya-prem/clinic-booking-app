@@ -80,7 +80,7 @@
   }
 
   function show(name) {
-    ['loading', 'pin', 'pending', 'day', 'book', 'devices'].forEach(function (n) {
+    ['loading', 'pin', 'pending', 'day', 'book', 'search', 'detail', 'devices'].forEach(function (n) {
       $('screen-' + n).hidden = (n !== name);
     });
   }
@@ -403,6 +403,9 @@
     } else {
       row.bookings.forEach(function (b) {
         var line = textEl('div', b.name, 'slot-name');
+        // Tap a booked name to open the booking.
+        line.dataset.id = b.id;
+        line.addEventListener('click', function () { openDetail(b.id, 'day'); });
         line.appendChild(textEl('span', b.status === 'arrived' ? 'Arrived' : 'Booked', 'pill ' + b.status));
         if (row.kind === 'extra') line.appendChild(textEl('span', 'Extra', 'pill extra'));
         if (row.kind === 'offgrid') line.appendChild(textEl('span', 'Off-grid', 'pill offgrid'));
@@ -572,9 +575,9 @@
       .then(function (r) {
         if (!r.ok && r.reason === 'slot_taken') {
           // Shown right here, in red, until they tap "Pick another slot".
-          $('taken-detail').textContent = 'Someone else booked ' + $('book-slot').textContent + ' a moment ago.';
-          $('taken-overlay').hidden = false;
-          $('taken-ok').focus();
+          showTaken('Someone else booked ' + $('book-slot').textContent + ' a moment ago.', function () {
+            backToDay('');
+          });
           return;
         }
         $('done-id').textContent = 'Booked: ' + r.id;
@@ -596,9 +599,17 @@
   }
 
   $('confirm-edit').addEventListener('click', function () { showBookPart('form'); });
+  /** The red "Slot already taken" box in the middle of the screen. */
+  var takenThen = null;
+  function showTaken(detailText, then) {
+    $('taken-detail').textContent = detailText;
+    takenThen = then;
+    $('taken-overlay').hidden = false;
+    $('taken-ok').focus();
+  }
   $('taken-ok').addEventListener('click', function () {
     $('taken-overlay').hidden = true;
-    backToDay('');
+    if (takenThen) takenThen();
   });
   $('book-cc').addEventListener('change', function () {
     $('book-cc-other').hidden = $('book-cc').value !== 'other';
@@ -614,6 +625,278 @@
   }
   $('book-back').addEventListener('click', function () { backToDay(''); });
   $('done-back').addEventListener('click', function () { backToDay(''); });
+
+  /* ---------- Search ---------- */
+
+  var search = { list: null, loading: false };
+
+  function openSearch() {
+    show('search');
+    $('search-input').value = '';
+    $('search-results').textContent = '';
+    $('search-hint').hidden = false;
+    loadSearchList().then(function () { $('search-input').focus(); });
+  }
+
+  /** The upcoming bookings, loaded once when Search opens; typing filters them instantly. */
+  function loadSearchList() {
+    search.loading = true;
+    return call('searchBookings', state.token, state.deviceId)
+      .then(function (r) { search.list = r.bookings; runSearch(); })
+      .catch(handleError)
+      .then(function () { search.loading = false; });
+  }
+
+  function runSearch() {
+    var q = $('search-input').value.trim();
+    var digits = q.replace(/\D/g, '');
+    var isNumber = digits.length >= 3 && digits.length >= q.replace(/[\s+\-()]/g, '').length;
+    var ul = $('search-results');
+    ul.textContent = '';
+    if (!search.list || (!isNumber && q.length < 2)) { $('search-hint').hidden = false; return; }
+    $('search-hint').hidden = true;
+    var words = q.toLowerCase();
+    var found = search.list.filter(function (b) {
+      if (isNumber) return String(b.mobile).replace(/\D/g, '').indexOf(digits) !== -1;
+      return b.name.toLowerCase().indexOf(words) !== -1;
+    });
+    if (!found.length) {
+      ul.appendChild(textEl('li', 'No bookings found from today onward.', 'muted'));
+      return;
+    }
+    found.slice(0, 50).forEach(function (b) {
+      var li = document.createElement('li');
+      li.tabIndex = 0;
+      li.setAttribute('role', 'button');
+      var title = textEl('div', b.name, 'title');
+      title.appendChild(textEl('span', statusLabel(b.status), 'pill ' + b.status));
+      li.appendChild(title);
+      li.appendChild(textEl('div', b.dateLabel + ', ' + to12h(b.time) + ' · ' + (b.mobile || 'no number') + ' · ' + b.id, 'when'));
+      li.addEventListener('click', function () { openDetail(b.id, 'search', b); });
+      li.addEventListener('keydown', function (e) { if (e.key === 'Enter') openDetail(b.id, 'search', b); });
+      ul.appendChild(li);
+    });
+  }
+
+  function statusLabel(status) {
+    return { booked: 'Booked', arrived: 'Arrived', cancelled: 'Cancelled', 'no-show': 'No-show' }[status] || status;
+  }
+
+  $('day-search').addEventListener('click', openSearch);
+  $('search-input').addEventListener('input', runSearch);
+  $('search-back').addEventListener('click', function () { backToDay(''); });
+
+  /* ---------- Booking details: edit, reschedule, cancel, undo cancel ---------- */
+
+  var detail = { booking: null, from: 'day' };
+
+  /** Opens a booking. `known` is the booking from the search list, if we have it. */
+  function openDetail(id, from, known) {
+    detail.from = from;
+    $('detail-msg').textContent = '';
+    $('detail-notify').hidden = true;
+    show('detail');
+    window.scrollTo(0, 0);
+    if (known) { renderDetail(known); return; }
+    $('detail-info').textContent = '';
+    $('detail-title').textContent = id;
+    call('getBooking', state.token, state.deviceId, id).then(renderDetail).catch(handleError);
+  }
+
+  function renderDetail(b) {
+    detail.booking = b;
+    $('detail-title').textContent = b.id;
+    var dl = $('detail-info');
+    dl.textContent = '';
+    var statusDd;
+    [['Patient', b.name], ['Mobile', b.mobile ? spacedPhone(b.mobile) : 'Not recorded'],
+     ['When', b.dateLabel + ', ' + to12h(b.time) + (b.type === 'extra' ? ' (extra)' : '')],
+     ['Status', ''], ['Reason', b.reason], ['Comments', b.comments || '–'],
+     ['Booked', (b.channel === 'walk-in' ? 'Walk-in' : 'Phone') + ', ' + b.createdAt + ' by ' + b.createdBy]]
+      .forEach(function (pair) {
+        dl.appendChild(textEl('dt', pair[0]));
+        var dd = textEl('dd', pair[1]);
+        if (pair[0] === 'Status') { statusDd = dd; dd.appendChild(textEl('span', statusLabel(b.status), 'pill ' + b.status)); }
+        dl.appendChild(dd);
+      });
+
+    var past = b.date < view.data.today;
+    $('detail-past').hidden = !past;
+    $('act-edit').hidden = past;
+    $('act-move').hidden = past || !(b.status === 'booked' || b.status === 'no-show');
+    $('act-cancel').hidden = past || b.status !== 'booked';
+    $('act-restore').hidden = past || b.status !== 'cancelled';
+    $('detail-actions').hidden = false;
+    $('edit-form').hidden = true;
+    $('move-panel').hidden = true;
+  }
+
+  function closePanels() {
+    $('edit-form').hidden = true;
+    $('move-panel').hidden = true;
+    $('detail-actions').hidden = false;
+  }
+
+  /** Runs a change on the server and shows the result on this screen. */
+  function runChange(fn, args, button, onDone) {
+    $('detail-msg').textContent = '';
+    button.disabled = true;
+    return call.apply(null, [fn, state.token, state.deviceId, detail.booking.id].concat(args))
+      .then(function (r) {
+        search.list = null;   // reload the search list next time
+        if (!r.ok && r.reason === 'slot_taken') {
+          // Same red box as for a new booking; then pick from the refreshed free slots.
+          showTaken('Someone else just booked that time.', function () { loadDay().then(fillMoveSlots); });
+          loadDay().then(fillMoveSlots);
+          return;
+        }
+        renderDetail(r.booking);
+        $('detail-msg').className = 'msg ok';
+        $('detail-msg').textContent = r.message;
+        if (onDone) onDone(r);
+        loadDay();
+      })
+      .catch(function (err) {
+        $('detail-msg').className = 'msg';   // red for problems
+        bookingError(err, $('detail-msg'));
+      })
+      .then(function () { button.disabled = false; });
+  }
+
+  /** WhatsApp and Copy buttons with a ready message for the patient. */
+  function showNotify(text) {
+    var link = whatsappLink(detail.booking.mobile, text);
+    $('notify-wa').hidden = !link;
+    if (link) $('notify-wa').href = link;
+    $('notify-copy').onclick = function () { copyText(text, $('notify-copy')); };
+    $('detail-notify').hidden = false;
+  }
+
+  $('detail-back').addEventListener('click', function () {
+    if (detail.from === 'search') {
+      show('search');
+      if (!search.list) loadSearchList(); else runSearch();
+    } else {
+      backToDay('');
+    }
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.detail-close'), function (b) {
+    b.addEventListener('click', closePanels);
+  });
+
+  // ----- Edit details -----
+  function fillCountrySelect(select, code) {
+    if (!select.options.length) {
+      Array.prototype.forEach.call($('book-cc').options, function (o) { select.appendChild(new Option(o.text, o.value)); });
+    }
+    var known = Array.prototype.some.call(select.options, function (o) { return o.value === code; });
+    select.value = known ? code : 'other';
+    return known;
+  }
+
+  $('act-edit').addEventListener('click', function () {
+    var b = detail.booking;
+    var m = String(b.mobile).match(/^\+(\d+) (\d+)$/);
+    var code = m ? m[1] : '91';
+    var number = m ? m[2] : String(b.mobile).replace(/\D/g, '');
+    var known = fillCountrySelect($('edit-cc'), code);
+    $('edit-cc-other').hidden = known;
+    $('edit-cc-other').value = known ? '' : code;
+    $('edit-name').value = b.name;
+    $('edit-mobile').value = number;
+    var reasons = $('edit-reason');
+    reasons.textContent = '';
+    var list = (view.data.reasons || []).slice();
+    if (list.indexOf(b.reason) === -1) list.unshift(b.reason);
+    list.forEach(function (r) { reasons.appendChild(new Option(r, r)); });
+    reasons.value = b.reason;
+    $('edit-comments').value = b.comments;
+    $('edit-msg').textContent = '';
+    $('detail-actions').hidden = true;
+    $('detail-notify').hidden = true;
+    $('edit-form').hidden = false;
+    $('edit-name').focus();
+  });
+  $('edit-cc').addEventListener('change', function () {
+    $('edit-cc-other').hidden = $('edit-cc').value !== 'other';
+  });
+  $('edit-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var details = {
+      name: $('edit-name').value.trim(),
+      countryCode: $('edit-cc').value === 'other' ? $('edit-cc-other').value.replace(/\D/g, '') : $('edit-cc').value,
+      mobile: $('edit-mobile').value.trim(),
+      reason: $('edit-reason').value,
+      comments: $('edit-comments').value.trim()
+    };
+    if (!details.name) { $('edit-msg').textContent = 'Enter the patient\'s name.'; return; }
+    runChange('editBooking', [details], e.submitter || $('edit-form').querySelector('[type=submit]'), function (r) {
+      if (r.mobileWarning) {
+        $('detail-msg').textContent = r.message + ' Please check the mobile number: it looks ' +
+          (r.mobileWarning === 'missing' ? 'empty.' : 'too short or too long.');
+      }
+    });
+  });
+
+  // ----- Reschedule -----
+  $('act-move').addEventListener('click', function () {
+    var select = $('move-date');
+    select.textContent = '';
+    view.data.days.forEach(function (d) {
+      if (d.open) select.appendChild(new Option((d.date === view.data.today ? 'Today · ' : '') + d.label, d.date));
+    });
+    var current = detail.booking.date;
+    select.value = Array.prototype.some.call(select.options, function (o) { return o.value === current; })
+      ? current : (select.options[0] && select.options[0].value);
+    $('move-msg').textContent = '';
+    $('detail-actions').hidden = true;
+    $('detail-notify').hidden = true;
+    $('move-panel').hidden = false;
+    fillMoveSlots();
+  });
+  $('move-date').addEventListener('change', fillMoveSlots);
+
+  /** Free slots on the chosen day (not ones that have started). */
+  function fillMoveSlots() {
+    if ($('move-panel').hidden) return;
+    var date = $('move-date').value;
+    var day = view.data.days.filter(function (d) { return d.date === date; })[0];
+    var now = nowInIndia().minutes;
+    var free = day ? day.rows.filter(function (r) {
+      return r.kind === 'free' && !(date === view.data.today && toMinutes(r.time) <= now);
+    }) : [];
+    var box = $('move-slots');
+    box.textContent = '';
+    $('move-none').hidden = free.length > 0;
+    free.forEach(function (r) {
+      var chip = textEl('button', to12h(r.time), 'chip');
+      chip.type = 'button';
+      chip.addEventListener('click', function () {
+        var label = day.label + ' at ' + to12h(r.time);
+        if (!confirm('Move ' + detail.booking.name + ' to ' + label + '?')) return;
+        runChange('rescheduleBooking', [{ date: date, time: r.time }], chip, function (res) {
+          showNotify('Hello ' + res.booking.name + ', your appointment at the clinic has been moved to ' +
+            res.booking.dateLabel + ' at ' + to12h(res.booking.time) +
+            '. Please reply if this time doesn\'t suit you. Thank you.');
+        });
+      });
+      box.appendChild(chip);
+    });
+  }
+
+  // ----- Cancel and undo cancel -----
+  $('act-cancel').addEventListener('click', function () {
+    var b = detail.booking;
+    if (!confirm('Cancel ' + b.name + '\'s booking on ' + b.dateLabel + ' at ' + to12h(b.time) + '?')) return;
+    runChange('cancelBooking', [], $('act-cancel'), function (r) {
+      showNotify('Hello ' + r.booking.name + ', your appointment at the clinic on ' + r.booking.dateLabel +
+        ' at ' + to12h(r.booking.time) + ' has been cancelled. Please call or message us if you would like ' +
+        'a new time. Thank you.');
+    });
+  });
+  $('act-restore').addEventListener('click', function () {
+    runChange('restoreBooking', [], $('act-restore'));
+  });
 
   /* ---------- Edit day ---------- */
 

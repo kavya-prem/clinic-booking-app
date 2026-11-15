@@ -263,6 +263,18 @@
   .done-id { font-size: 32px; font-weight: 800; color: var(--ok); text-align: center; margin: 16px 0 4px; }
   #done-text { text-align: center; }
 
+  /* ---------- Search and booking details ---------- */
+  #search-input { margin-top: 8px; font-size: 18px; }
+  .results { margin-top: 12px; }
+  .results li { cursor: pointer; }
+  .results li:hover, .results li:focus { border-color: var(--primary); outline: none; }
+  .results .when { color: var(--muted); font-size: 14px; }
+  .slot-name[data-id] { cursor: pointer; }
+  .slot-name[data-id]:hover { text-decoration: underline; }
+  #detail-actions .btn { margin-top: 10px; }
+  .move-slots { margin-top: 12px; }
+  .pill.cancelled, .pill.no-show { background: #fde8e8; color: var(--danger); }
+
   .pill.booked { background: #e8f0fe; color: var(--primary); }
   .pill.arrived { background: #e3f4e8; color: var(--ok); }
   .pill.extra { background: var(--warn-bg); color: #9a5b00; }

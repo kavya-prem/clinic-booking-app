@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Clinic booking">
     <title>Clinic booking</title>
-    <link rel="stylesheet" href="styles.css?v=20261115161254">
+    <link rel="stylesheet" href="styles.css?v=20261115162350">
   </head>
   <body>
     <main class="wrap">
@@ -65,6 +65,7 @@
           <div class="day-actions">
             <button id="day-today" class="btn small" hidden>Back to today</button>
             <button id="day-walkin" class="btn small primary" hidden>Walk-in</button>
+            <button id="day-search" class="btn small">🔍 Search</button>
             <button id="day-edit" class="btn small" hidden>Edit day</button>
           </div>
           <p id="day-msg" class="msg ok" role="status"></p>
@@ -197,19 +198,81 @@
           <button id="confirm-edit" class="btn">Change details</button>
         </div>
 
-        <!-- Shown over the confirm screen if someone else booked the slot first -->
-        <div id="taken-overlay" class="overlay" hidden>
-          <div class="overlay-box" role="alertdialog" aria-labelledby="taken-text">
-            <p id="taken-text" class="taken-text">Slot already taken.<br>Please book another slot.</p>
-            <p id="taken-detail" class="muted"></p>
-            <button id="taken-ok" class="btn primary">Pick another slot</button>
-          </div>
-        </div>
-
         <div id="book-done" hidden>
           <p class="done-id" id="done-id"></p>
           <p id="done-text"></p>
           <button id="done-back" class="btn primary">Back to the day</button>
+        </div>
+      </section>
+
+      <!-- Search by mobile number or name -->
+      <section id="screen-search" class="card" hidden>
+        <div class="row-between">
+          <h1>Search</h1>
+          <button id="search-back" class="btn link">← Day view</button>
+        </div>
+        <input id="search-input" class="text-input" type="search" autocomplete="off"
+               placeholder="Mobile number or name" aria-label="Mobile number or name">
+        <p id="search-hint" class="muted">Type at least 3 digits of the number, or 2 letters of the name.
+          Searches bookings from today onward.</p>
+        <ul id="search-results" class="list results"></ul>
+      </section>
+
+      <!-- One booking: details and what can be done with it -->
+      <section id="screen-detail" class="card" hidden>
+        <div class="row-between">
+          <h1 id="detail-title">Booking</h1>
+          <button id="detail-back" class="btn link">← Back</button>
+        </div>
+        <p id="detail-msg" class="msg ok" role="status"></p>
+        <dl id="detail-info" class="details"></dl>
+
+        <div id="detail-actions">
+          <button id="act-edit" class="btn">Edit details</button>
+          <button id="act-move" class="btn">Reschedule</button>
+          <button id="act-cancel" class="btn danger">Cancel booking</button>
+          <button id="act-restore" class="btn">Undo cancel</button>
+          <p id="detail-past" class="muted" hidden>This booking's date has passed, so it can't be changed here.</p>
+        </div>
+
+        <!-- Tell the patient (after a reschedule or cancel) -->
+        <div id="detail-notify" class="affected" hidden>
+          <p class="edit-title">Let the patient know</p>
+          <div class="affected-actions">
+            <a id="notify-wa" class="btn small whatsapp" target="_blank" rel="noopener">WhatsApp</a>
+            <button id="notify-copy" class="btn small" type="button">Copy message</button>
+          </div>
+        </div>
+
+        <form id="edit-form" class="edit-panel" hidden novalidate>
+          <p class="edit-title">Edit details</p>
+          <label for="edit-name">Patient name</label>
+          <input id="edit-name" class="text-input" maxlength="60" autocomplete="off">
+          <label for="edit-mobile">Mobile number</label>
+          <p class="field-note">Ask for their WhatsApp number.</p>
+          <div class="phone-row">
+            <select id="edit-cc" class="text-input" aria-label="Country code"></select>
+            <input id="edit-cc-other" class="text-input cc-other" type="tel" inputmode="numeric" maxlength="5"
+                   placeholder="+code" aria-label="Country code (other)" hidden>
+            <input id="edit-mobile" class="text-input" type="tel" inputmode="numeric" maxlength="20" autocomplete="off">
+          </div>
+          <label for="edit-reason">Visit reason</label>
+          <select id="edit-reason" class="text-input"></select>
+          <label for="edit-comments">Comments (optional)</label>
+          <textarea id="edit-comments" class="text-input" rows="2" maxlength="200"
+                    placeholder="Practical notes only. No symptoms or diagnoses"></textarea>
+          <p id="edit-msg" class="msg" role="alert"></p>
+          <button type="submit" class="btn primary">Save details</button>
+          <button type="button" class="btn link detail-close">← Back</button>
+        </form>
+
+        <div id="move-panel" class="edit-panel" hidden>
+          <p class="edit-title">Pick a new day and a free slot</p>
+          <select id="move-date" class="text-input" aria-label="New day"></select>
+          <div id="move-slots" class="chips move-slots"></div>
+          <p id="move-none" class="muted" hidden>No free slots on this day.</p>
+          <p id="move-msg" class="msg" role="alert"></p>
+          <button type="button" class="btn link detail-close">← Back</button>
         </div>
       </section>
 
@@ -230,9 +293,17 @@
 
         <button id="btn-logout-all" class="btn danger">Log out all other devices</button>
       </section>
+      <!-- Shown over any screen if someone else booked the slot first -->
+      <div id="taken-overlay" class="overlay" hidden>
+        <div class="overlay-box" role="alertdialog" aria-labelledby="taken-text">
+          <p id="taken-text" class="taken-text">Slot already taken.<br>Please book another slot.</p>
+          <p id="taken-detail" class="muted"></p>
+          <button id="taken-ok" class="btn primary">Pick another slot</button>
+        </div>
+      </div>
     </main>
 
-    <script src="config.js?v=20261115161254"></script>
-    <script src="app.js?v=20261115161254"></script>
+    <script src="config.js?v=20261115162350"></script>
+    <script src="app.js?v=20261115162350"></script>
   </body>
 </html>
