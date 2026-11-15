@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Clinic booking">
     <title>Clinic booking</title>
-    <link rel="stylesheet" href="styles.css?v=20261115174819">
+    <link rel="stylesheet" href="styles.css?v=20261115175803">
   </head>
   <body>
     <main class="wrap">
@@ -46,29 +46,30 @@
         <div class="topbar">
           <span class="muted">Logged in as <strong id="who"></strong></span>
           <span class="topbar-actions">
-            <button id="btn-settings" class="btn small" hidden>⚙ Settings</button>
-            <button id="btn-devices" class="btn small" hidden>
-              Devices <span id="badge" class="badge" hidden></span>
+            <button id="btn-settings" class="btn small" hidden>
+              ⚙ Settings <span id="badge-settings" class="badge" hidden></span>
             </button>
             <button id="btn-logout" class="btn small">Log out</button>
           </span>
         </div>
 
         <div class="card">
+          <!-- Search on the left, the day in the middle, Add paper booking on the right -->
+          <div class="day-head">
+            <button id="day-search" class="btn small head-btn">🔍 Search</button>
+            <div id="day-label" class="day-label"></div>
+            <button id="day-paper" class="btn small head-btn">+ Add paper booking</button>
+          </div>
           <div class="datebar">
             <button id="day-prev" class="btn nav" aria-label="Previous day">‹</button>
             <div class="date-center">
-              <div id="day-label" class="day-label"></div>
               <input id="day-picker" type="date" aria-label="Pick a date">
             </div>
             <button id="day-next" class="btn nav" aria-label="Next day">›</button>
           </div>
           <div class="day-actions">
             <button id="day-today" class="btn small" hidden>Back to today</button>
-            <button id="day-walkin" class="btn small primary" hidden>Walk-in</button>
-            <button id="day-search" class="btn small">🔍 Search</button>
             <button id="day-extra" class="btn small" hidden>+ Extra booking</button>
-            <button id="day-paper" class="btn small">📝 Paper booking</button>
             <button id="day-unresolved" class="btn small needs" hidden></button>
             <button id="day-edit" class="btn small" hidden>Edit day</button>
           </div>
@@ -333,6 +334,12 @@
         </div>
 
         <div class="set-block">
+          <p class="edit-title">Devices</p>
+          <p class="muted">Approve new phones and computers, or remove one (for example a lost phone).</p>
+          <button id="btn-devices" class="btn small">Manage devices <span id="badge" class="badge" hidden></span></button>
+        </div>
+
+        <div class="set-block">
           <p class="edit-title">Clinic name</p>
           <p class="muted">Shown at the end of WhatsApp messages to patients.</p>
           <input id="set-clinic" class="text-input" maxlength="60" placeholder="For example: Dr. Prem's Clinic">
@@ -398,7 +405,7 @@
       <section id="screen-devices" class="card" hidden>
         <div class="row-between">
           <h1>Devices</h1>
-          <button id="devices-back" class="btn link">← Back</button>
+          <button id="devices-back" class="btn link">← Settings</button>
         </div>
         <p id="devices-msg" class="msg ok" role="status"></p>
 
@@ -421,8 +428,8 @@
       </div>
     </main>
 
-    <script>window.APP_VERSION = '20261115174819';</script>
-    <script src="config.js?v=20261115174819"></script>
-    <script src="app.js?v=20261115174819"></script>
+    <script>window.APP_VERSION = '20261115175803';</script>
+    <script src="config.js?v=20261115175803"></script>
+    <script src="app.js?v=20261115175803"></script>
   </body>
 </html>

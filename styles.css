@@ -119,6 +119,20 @@
   }
   .topbar-actions { display: flex; flex-wrap: wrap; gap: 6px; }
   .topbar-actions .btn.small { margin: 0; }
+  .day-head {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .day-head .head-btn { margin: 0; padding: 7px 9px; font-size: 13px; line-height: 1.2; max-width: 100px; }
+  .day-kicker { display: block; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.5px; }
+  .day-main { display: block; white-space: nowrap; font-size: 19px; }
+  .day-head #day-search { justify-self: start; }
+  .day-head #day-paper { justify-self: end; text-align: right; }
+  .day-head .day-label { text-align: center; }
   .datebar { display: flex; align-items: center; gap: 8px; }
   .btn.nav {
     width: 48px;
@@ -128,6 +142,7 @@
     line-height: 1;
   }
   .date-center { flex: 1; text-align: center; min-width: 0; }
+  .date-center #day-picker { margin-top: 0; }
   .day-label { font-size: 20px; font-weight: 700; }
   #day-picker {
     margin-top: 6px;

@@ -124,16 +124,18 @@
   function showHome(session) {
     state.role = session.role;
     $('who').textContent = session.role === 'admin' ? 'Admin' : 'Receptionist';
-    $('btn-devices').hidden = session.role !== 'admin';
     $('btn-settings').hidden = session.role !== 'admin';
     setBadge(session.pendingDevices || 0);
     show('day');
     loadDay();
   }
 
+  /** Devices waiting for approval: shown on Settings and on Manage devices. */
   function setBadge(count) {
-    $('badge').textContent = count;
-    $('badge').hidden = !count;
+    ['badge', 'badge-settings'].forEach(function (id) {
+      $(id).textContent = count;
+      $(id).hidden = !count;
+    });
   }
 
   /* ---------- Login ---------- */
@@ -282,7 +284,7 @@
   }
 
   $('btn-devices').addEventListener('click', openDevices);
-  $('devices-back').addEventListener('click', function () { show('day'); loadDay(); });
+  $('devices-back').addEventListener('click', function () { openSettings(); });
 
   $('btn-logout-all').addEventListener('click', function () {
     if (!confirm('Log out every other device? They will need the PIN again.')) return;
@@ -351,14 +353,16 @@
     var isToday = day.date === data.today;
     var isPast = !!day.past;
 
-    $('day-label').textContent = (isToday ? 'Today · ' : isPast ? 'Past · ' : '') + day.label;
+    // "Today" / "Past" on a small line above the date, so it fits on a phone.
+    $('day-label').textContent = '';
+    $('day-label').appendChild(textEl('span', isToday ? 'Today' : isPast ? 'Past' : '\u00a0', 'day-kicker'));
+    $('day-label').appendChild(textEl('span', day.label, 'day-main'));
     $('day-picker').min = data.days[0].date;
     $('day-picker').max = data.days[data.days.length - 1].date;
     $('day-picker').value = day.date;
     $('day-prev').disabled = index === 0;
     $('day-next').disabled = index === data.days.length - 1;
     $('day-today').hidden = isToday;
-    $('day-walkin').hidden = !(isToday && day.open);
     $('day-extra').hidden = !day.open || isPast;
     $('day-unresolved').hidden = !data.unresolvedCount;
     $('day-unresolved').textContent = '⚠ Needs status (' + data.unresolvedCount + ')';
@@ -608,20 +612,6 @@
     $('day-msg').textContent = message || '';
     loadDay();
   }
-
-  /** Walk-in: today's next free slot (one that hasn't started yet). */
-  $('day-walkin').addEventListener('click', function () {
-    var today = view.data.days.filter(function (d) { return d.date === view.data.today; })[0];
-    var now = nowInIndia().minutes;
-    var next = today && today.rows.filter(function (r) {
-      return r.kind === 'free' && toMinutes(r.time) > now;
-    })[0];
-    if (!next) {
-      $('day-msg').textContent = 'No free slots left today. Use "+ Extra booking" for an urgent patient, or pick another day.';
-      return;
-    }
-    openBooking(today.date, next.time, 'walk-in');
-  });
 
   $('book-comments').addEventListener('input', function () {
     $('book-count').textContent = $('book-comments').value.length + ' / 200';
