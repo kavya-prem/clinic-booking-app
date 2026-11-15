@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Clinic booking">
     <title>Clinic booking</title>
-    <link rel="stylesheet" href="styles.css?v=20261115165353">
+    <link rel="stylesheet" href="styles.css?v=20261115172210">
   </head>
   <body>
     <main class="wrap">
@@ -148,10 +148,11 @@
           <!-- Extra and paper bookings: pick the date and time here -->
           <div id="book-when" hidden>
             <div class="time-pair">
-              <label id="book-date-label">Date <select id="book-date" class="text-input"></select></label>
+              <label id="book-date-label">Date <input id="book-date" type="date" class="text-input"></label>
               <label>Time <select id="book-time" class="text-input"></select></label>
             </div>
           </div>
+          <p id="book-future-note" class="field-note" hidden>This visit hasn't happened yet, so it will be saved as Booked.</p>
           <fieldset id="book-status-box" class="scope" hidden>
             <legend class="field-label">Status written on the paper</legend>
             <label><input type="radio" name="book-status" value="arrived" checked> Arrived</label>
@@ -242,7 +243,7 @@
         <input id="search-input" class="text-input" type="search" autocomplete="off"
                placeholder="Mobile number or name" aria-label="Mobile number or name">
         <p id="search-hint" class="muted">Type at least 3 digits of the number, or 2 letters of the name.
-          Searches bookings from today onward.</p>
+          Searches bookings from 7 days ago onward.</p>
         <ul id="search-results" class="list results"></ul>
       </section>
 
@@ -339,7 +340,7 @@
       </div>
     </main>
 
-    <script src="config.js?v=20261115165353"></script>
-    <script src="app.js?v=20261115165353"></script>
+    <script src="config.js?v=20261115172210"></script>
+    <script src="app.js?v=20261115172210"></script>
   </body>
 </html>

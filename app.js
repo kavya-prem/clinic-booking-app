@@ -348,8 +348,9 @@
     var index = data.days.map(function (d) { return d.date; }).indexOf(view.date);
     var day = data.days[index];
     var isToday = day.date === data.today;
+    var isPast = !!day.past;
 
-    $('day-label').textContent = (isToday ? 'Today · ' : '') + day.label;
+    $('day-label').textContent = (isToday ? 'Today · ' : isPast ? 'Past · ' : '') + day.label;
     $('day-picker').min = data.days[0].date;
     $('day-picker').max = data.days[data.days.length - 1].date;
     $('day-picker').value = day.date;
@@ -357,16 +358,20 @@
     $('day-next').disabled = index === data.days.length - 1;
     $('day-today').hidden = isToday;
     $('day-walkin').hidden = !(isToday && day.open);
-    $('day-extra').hidden = !day.open;
+    $('day-extra').hidden = !day.open || isPast;
     $('day-unresolved').hidden = !data.unresolvedCount;
     $('day-unresolved').textContent = '⚠ Needs status (' + data.unresolvedCount + ')';
     // A message belongs to the day it was shown on.
     if (view.shownDate && view.shownDate !== day.date) $('day-msg').textContent = '';
     view.shownDate = day.date;
     // Edit is offered on working days and on days that already have changes.
-    $('day-edit').hidden = !(day.workingDay || day.custom);
+    $('day-edit').hidden = isPast || !(day.workingDay || day.custom);
     if (editState.date && editState.date !== day.date) closeEdit();
 
+    if (isPast) {
+      renderPastDay(day);
+      return;
+    }
     if (day.open) {
       $('day-hours').textContent = 'Open ' + day.hours.split(', ').map(function (r) {
         var p = r.split('-');
@@ -442,6 +447,43 @@
     }
     li.appendChild(body);
     return li;
+  }
+
+  /**
+   * An earlier day: view only. Every booking with its status (including
+   * No-show and Cancelled); tap a name to open it and correct its status.
+   */
+  function renderPastDay(day) {
+    $('day-hours').textContent = 'Earlier day, view only. Tap a name to correct its status.';
+    var list = $('slot-list');
+    list.textContent = '';
+    var all = [];
+    day.rows.forEach(function (row) {
+      row.bookings.forEach(function (b) { all.push({ b: b, kind: row.kind }); });
+    });
+    (day.noShows || []).concat(day.cancelled || []).forEach(function (b) { all.push({ b: b, kind: 'other' }); });
+    all.sort(function (x, y) { return x.b.time < y.b.time ? -1 : x.b.time > y.b.time ? 1 : 0; });
+    if (!all.length) {
+      list.appendChild(textEl('li', 'No bookings on this day.', 'slot-empty'));
+      return;
+    }
+    all.forEach(function (item) {
+      var b = item.b;
+      var li = document.createElement('li');
+      li.className = 'slot past';
+      li.appendChild(textEl('span', to12h(b.time), 'slot-time'));
+      var body = document.createElement('span');
+      body.className = 'slot-body';
+      var line = textEl('div', b.name, 'slot-name');
+      line.dataset.id = b.id;
+      line.addEventListener('click', function () { openDetail(b.id, 'day'); });
+      line.appendChild(textEl('span', statusLabel(b.status), 'pill ' + b.status));
+      if (b.status === 'booked') line.appendChild(textEl('span', 'Needs status', 'pill late'));
+      if (b.type === 'extra') line.appendChild(textEl('span', 'Extra', 'pill extra'));
+      body.appendChild(line);
+      li.appendChild(body);
+      list.appendChild(li);
+    });
   }
 
   /** A small Arrived / No-show button on a day-view row. */
@@ -526,16 +568,15 @@
       : mode === 'paper' ? 'For bookings written on paper while the app was down (up to 7 days back).' : '';
     if (mode !== 'regular') {
       fillTimes5($('book-time'), time);
-      var dates = $('book-date');
-      dates.textContent = '';
       if (mode === 'paper') {
-        for (var i = 7; i >= 0; i--) {
-          var d = addDaysLocal(view.data.today, -i);
-          dates.appendChild(new Option(i === 0 ? 'Today' : shortDate(d), d));
-        }
-        dates.value = view.data.today;
+        // A calendar from 7 days back to the end of the booking window.
+        $('book-date').min = view.data.days[0].date;
+        $('book-date').max = view.data.days[view.data.days.length - 1].date;
+        $('book-date').value = view.data.today;
         document.querySelector('input[name="book-status"][value="arrived"]').checked = true;
+        updatePaperStatus();
       }
+      $('book-future-note').hidden = true;
     }
     $('book-name').value = '';
     $('book-mobile').value = '';
@@ -589,7 +630,8 @@
       mode: mode,
       date: mode === 'paper' ? $('book-date').value : booking.draft.date,
       time: mode === 'regular' ? booking.draft.time : $('book-time').value,
-      status: mode === 'paper' ? document.querySelector('input[name="book-status"]:checked').value : undefined,
+      status: mode !== 'paper' ? undefined
+        : $('book-status-box').hidden ? 'booked' : document.querySelector('input[name="book-status"]:checked').value,
       name: $('book-name').value.trim(),
       countryCode: $('book-cc').value === 'other' ? $('book-cc-other').value.replace(/\D/g, '') : $('book-cc').value,
       mobile: $('book-mobile').value.trim(),
@@ -640,7 +682,9 @@
     dl.textContent = '';
     var rows = [['Patient', b.name], ['When', b.dateLabel + ', ' + to12h(b.time) + (b.slotType === 'extra' ? ' (extra)' : '')],
      ['Reason', b.reason], ['How', b.channel === 'walk-in' ? 'Walk-in' : 'Phone call'], ['Comments', b.comments || '–']];
-    if (b.mode === 'paper') rows.splice(2, 0, ['Status', statusLabel(b.status) + ' (from paper)']);
+    if (b.mode === 'paper') {
+      rows.splice(2, 0, ['Status', b.status === 'booked' ? 'Booked (visit not yet happened)' : statusLabel(b.status) + ' (from paper)']);
+    }
     rows
       .forEach(function (pair) {
         dl.appendChild(textEl('dt', pair[0]));
@@ -757,6 +801,21 @@
   $('day-paper').addEventListener('click', function () {
     openBooking(view.data.today, '16:00', 'phone', 'paper');
   });
+  /**
+   * Paper booking: a visit that hasn't happened yet is saved as Booked, so
+   * the "status written on the paper" choice is only shown for past visits.
+   */
+  function updatePaperStatus() {
+    if (!booking.draft || booking.draft.mode !== 'paper') return;
+    var date = $('book-date').value;
+    var future = date > view.data.today ||
+      (date === view.data.today && toMinutes($('book-time').value) > nowInIndia().minutes);
+    $('book-status-box').hidden = future;
+    $('book-future-note').hidden = !future;
+  }
+  $('book-date').addEventListener('change', updatePaperStatus);
+  $('book-time').addEventListener('change', updatePaperStatus);
+
   $('book-time').addEventListener('change', function () {
     if (booking.draft && booking.draft.mode === 'extra') {
       var day = view.data.days.filter(function (d) { return d.date === booking.draft.date; })[0];
@@ -770,11 +829,12 @@
     show('unresolved');
     window.scrollTo(0, 0);
     $('unresolved-done').hidden = true;
+    $('unresolved-later').textContent = 'Later';
     var ul = $('unresolved-list');
     ul.textContent = '';
     call('getUnresolved', state.token, state.deviceId)
       .then(function (list) {
-        if (!list.length) { $('unresolved-done').hidden = false; return; }
+        if (!list.length) { unresolvedFinished(); return; }
         list.forEach(function (u) {
           var li = document.createElement('li');
           li.appendChild(textEl('div', u.name, 'title'));
@@ -790,7 +850,7 @@
                 call('setBookingStatus', state.token, state.deviceId, u.id, choice[0])
                   .then(function () {
                     li.remove();
-                    if (!ul.children.length) $('unresolved-done').hidden = false;
+                    if (!ul.children.length) unresolvedFinished();
                   })
                   .catch(function (err) {
                     Array.prototype.forEach.call(actions.children, function (x) { x.disabled = false; });
@@ -804,6 +864,12 @@
         });
       })
       .catch(handleError);
+  }
+
+  /** Nothing left: say so, and the button just goes back. */
+  function unresolvedFinished() {
+    $('unresolved-done').hidden = false;
+    $('unresolved-later').textContent = 'Back to day view';
   }
 
   $('day-unresolved').addEventListener('click', openUnresolved);
@@ -844,7 +910,7 @@
       return b.name.toLowerCase().indexOf(words) !== -1;
     });
     if (!found.length) {
-      ul.appendChild(textEl('li', 'No bookings found from today onward.', 'muted'));
+      ul.appendChild(textEl('li', 'No bookings found (searches 7 days back onward).', 'muted'));
       return;
     }
     found.slice(0, 50).forEach(function (b) {
