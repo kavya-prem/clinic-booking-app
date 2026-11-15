@@ -461,6 +461,10 @@
     $('book-slot').textContent = (day ? day.label : date) + ', ' + to12h(time);
     $('book-name').value = '';
     $('book-mobile').value = '';
+    $('book-cc').value = '91';
+    $('book-cc-other').value = '';
+    $('book-cc-other').hidden = true;
+    $('taken-overlay').hidden = true;
     $('book-comments').value = '';
     $('book-count').textContent = '0 / 200';
     $('book-msg').textContent = '';
@@ -506,6 +510,7 @@
       date: booking.draft.date,
       time: booking.draft.time,
       name: $('book-name').value.trim(),
+      countryCode: $('book-cc').value === 'other' ? $('book-cc-other').value.replace(/\D/g, '') : $('book-cc').value,
       mobile: $('book-mobile').value.trim(),
       reason: $('book-reason').value,
       comments: $('book-comments').value.trim(),
@@ -513,6 +518,10 @@
     };
     if (!draft.name) { $('book-msg').textContent = 'Enter the patient\'s name.'; return; }
     if (!draft.reason) { $('book-msg').textContent = 'Pick a visit reason.'; return; }
+    if ($('book-cc').value === 'other' && !draft.countryCode) {
+      $('book-msg').textContent = 'Type the country code, for example 49 for Germany.';
+      return;
+    }
     $('book-msg').textContent = '';
     busy($('book-next'), true);
     call('checkBooking', state.token, state.deviceId, draft)
@@ -525,12 +534,14 @@
   });
 
   function showConfirm(b, warnings) {
-    $('confirm-mobile').textContent = b.mobile ? b.mobile.replace(/(\d{5})(\d+)/, '$1 $2') : 'No number';
+    $('confirm-mobile').textContent = b.mobile ? spacedPhone(b.mobile) : 'No number';
     var mw = $('confirm-mobile-warning');
     mw.hidden = !warnings.mobile;
     mw.textContent = warnings.mobile === 'missing'
       ? 'You have not entered the mobile number. Go back and enter it if you can.'
-      : 'This number doesn\'t look like a 10-digit Indian mobile number. Please check it.';
+      : (b.mobile.indexOf('+91 ') === 0
+        ? 'This doesn\'t look like a 10-digit Indian mobile number. Please check it.'
+        : 'This number looks too short or too long. Please check it.');
     var up = $('confirm-upcoming');
     up.hidden = warnings.upcoming.length === 0;
     up.textContent = 'This number already has ' + warnings.upcoming.length + ' upcoming booking' +
@@ -560,7 +571,10 @@
     call('createBooking', state.token, state.deviceId, booking.draft)
       .then(function (r) {
         if (!r.ok && r.reason === 'slot_taken') {
-          backToDay('This slot was just taken. Pick another.');
+          // Shown right here, in red, until they tap "Pick another slot".
+          $('taken-detail').textContent = 'Someone else booked ' + $('book-slot').textContent + ' a moment ago.';
+          $('taken-overlay').hidden = false;
+          $('taken-ok').focus();
           return;
         }
         $('done-id').textContent = 'Booked: ' + r.id;
@@ -582,6 +596,22 @@
   }
 
   $('confirm-edit').addEventListener('click', function () { showBookPart('form'); });
+  $('taken-ok').addEventListener('click', function () {
+    $('taken-overlay').hidden = true;
+    backToDay('');
+  });
+  $('book-cc').addEventListener('change', function () {
+    $('book-cc-other').hidden = $('book-cc').value !== 'other';
+    if (!$('book-cc-other').hidden) $('book-cc-other').focus();
+  });
+
+  /** "+91 9876543210" → "+91 98765 43210" (easier to read back). */
+  function spacedPhone(phone) {
+    var m = String(phone).match(/^(\+\d+) (\d+)$/);
+    if (!m) return phone;
+    var n = m[2].length === 10 ? m[2].replace(/(\d{5})(\d{5})/, '$1 $2') : m[2].replace(/(\d{3})(?=\d{3})/g, '$1 ');
+    return m[1] + ' ' + n;
+  }
   $('book-back').addEventListener('click', function () { backToDay(''); });
   $('done-back').addEventListener('click', function () { backToDay(''); });
 
@@ -712,11 +742,15 @@
       'available at that time. Please reply to this message or call us to choose a new time. Thank you.';
   }
 
-  /** wa.me needs the number with the country code (91 for India) and digits only. */
+  /**
+   * wa.me needs the number with its country code, digits only.
+   * "+971 501234567" → 971501234567. Older 10-digit numbers are Indian (91).
+   */
   function whatsappLink(mobile, text) {
-    var digits = String(mobile || '').replace(/\D/g, '');
-    if (digits.length === 10) digits = '91' + digits;
-    if (!/^91\d{10}$/.test(digits)) return null;
+    var s = String(mobile || '').trim();
+    var digits = s.replace(/\D/g, '');
+    if (s.charAt(0) !== '+' && digits.length === 10) digits = '91' + digits;
+    if (!/^\d{8,15}$/.test(digits)) return null;
     return 'https://wa.me/' + digits + '?text=' + encodeURIComponent(text);
   }
 

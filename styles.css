@@ -211,12 +211,40 @@
   #book-form label, .field-label { display: block; font-weight: 600; margin: 14px 0 0; }
   #book-form .scope label { font-weight: 400; margin: 8px 0; }
   .small-right { text-align: right; margin: 2px 0 0; font-size: 12px; }
+  .field-note { margin: 2px 0 0; font-size: 13px; color: #1f7a45; font-weight: 600; }
+  .phone-row { display: flex; gap: 8px; margin-top: 6px; }
+  .phone-row .text-input { margin-top: 0; }
+  #book-cc { flex: 0 0 auto; max-width: 48%; }
+  .cc-other { flex: 0 0 76px; width: 76px; }
+  #book-mobile { flex: 1; min-width: 0; }
+
+  /* "Slot already taken": a red box in the middle of the screen */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(29, 35, 48, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 10;
+  }
+  .overlay-box {
+    background: #fff;
+    border: 3px solid var(--danger);
+    border-radius: 14px;
+    padding: 24px;
+    max-width: 360px;
+    width: 100%;
+    text-align: center;
+  }
+  .taken-text { color: var(--danger); font-size: 22px; font-weight: 800; margin: 0 0 8px; }
   textarea.text-input { resize: vertical; font-family: inherit; }
   .big-mobile {
-    font-size: clamp(26px, 9vw, 40px);  /* as big as fits on one line */
+    font-size: clamp(22px, 7vw, 40px);  /* as big as fits on one line */
     font-weight: 800;
     letter-spacing: 2px;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
     text-align: center;
     margin: 12px 0;
     font-variant-numeric: tabular-nums;
