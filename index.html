@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Clinic booking">
     <title>Clinic booking</title>
-    <link rel="stylesheet" href="styles.css?v=20261115162350">
+    <link rel="stylesheet" href="styles.css?v=20261115165353">
   </head>
   <body>
     <main class="wrap">
@@ -66,6 +66,9 @@
             <button id="day-today" class="btn small" hidden>Back to today</button>
             <button id="day-walkin" class="btn small primary" hidden>Walk-in</button>
             <button id="day-search" class="btn small">🔍 Search</button>
+            <button id="day-extra" class="btn small" hidden>+ Extra booking</button>
+            <button id="day-paper" class="btn small">📝 Paper booking</button>
+            <button id="day-unresolved" class="btn small needs" hidden></button>
             <button id="day-edit" class="btn small" hidden>Edit day</button>
           </div>
           <p id="day-msg" class="msg ok" role="status"></p>
@@ -139,8 +142,23 @@
           <button id="book-back" class="btn link">← Day view</button>
         </div>
         <p id="book-slot" class="book-slot"></p>
+        <p id="book-mode-note" class="muted" hidden></p>
 
         <form id="book-form" novalidate>
+          <!-- Extra and paper bookings: pick the date and time here -->
+          <div id="book-when" hidden>
+            <div class="time-pair">
+              <label id="book-date-label">Date <select id="book-date" class="text-input"></select></label>
+              <label>Time <select id="book-time" class="text-input"></select></label>
+            </div>
+          </div>
+          <fieldset id="book-status-box" class="scope" hidden>
+            <legend class="field-label">Status written on the paper</legend>
+            <label><input type="radio" name="book-status" value="arrived" checked> Arrived</label>
+            <label><input type="radio" name="book-status" value="no-show"> No-show</label>
+            <label><input type="radio" name="book-status" value="cancelled"> Cancelled</label>
+          </fieldset>
+
           <label for="book-name">Patient name</label>
           <input id="book-name" class="text-input" maxlength="60" autocomplete="off"
                  placeholder="The patient's name, even if someone else is calling">
@@ -192,6 +210,7 @@
           <p id="confirm-mobile" class="big-mobile"></p>
           <p id="confirm-mobile-warning" class="warn-box" hidden></p>
           <p id="confirm-upcoming" class="warn-box soft" hidden></p>
+          <p id="confirm-conflict" class="warn-box soft" hidden></p>
           <dl id="confirm-details" class="details"></dl>
           <p id="confirm-msg" class="msg" role="alert"></p>
           <button id="confirm-save" class="btn primary">Save booking</button>
@@ -203,6 +222,15 @@
           <p id="done-text"></p>
           <button id="done-back" class="btn primary">Back to the day</button>
         </div>
+      </section>
+
+      <!-- Earlier bookings that still need a final status -->
+      <section id="screen-unresolved" class="card" hidden>
+        <h1>These bookings still need a status</h1>
+        <p class="muted">Bookings from earlier days are still marked Booked. Pick what happened.</p>
+        <ul id="unresolved-list" class="list"></ul>
+        <p id="unresolved-done" class="msg ok" hidden>All done. Every past booking has a status.</p>
+        <button id="unresolved-later" class="btn">Later</button>
       </section>
 
       <!-- Search by mobile number or name -->
@@ -231,8 +259,10 @@
           <button id="act-edit" class="btn">Edit details</button>
           <button id="act-move" class="btn">Reschedule</button>
           <button id="act-cancel" class="btn danger">Cancel booking</button>
+          <button id="act-arrived" class="btn primary">✓ Mark arrived</button>
           <button id="act-restore" class="btn">Undo cancel</button>
-          <p id="detail-past" class="muted" hidden>This booking's date has passed, so it can't be changed here.</p>
+          <button id="act-status" class="btn">Correct status</button>
+          <p id="detail-past" class="muted" hidden>This booking's date has passed. Only its status can be corrected.</p>
         </div>
 
         <!-- Tell the patient (after a reschedule or cancel) -->
@@ -242,6 +272,12 @@
             <a id="notify-wa" class="btn small whatsapp" target="_blank" rel="noopener">WhatsApp</a>
             <button id="notify-copy" class="btn small" type="button">Copy message</button>
           </div>
+        </div>
+
+        <div id="status-panel" class="edit-panel" hidden>
+          <p class="edit-title">Change the status to</p>
+          <div id="status-choices" class="affected-actions"></div>
+          <button type="button" class="btn link detail-close">← Back</button>
         </div>
 
         <form id="edit-form" class="edit-panel" hidden novalidate>
@@ -303,7 +339,7 @@
       </div>
     </main>
 
-    <script src="config.js?v=20261115162350"></script>
-    <script src="app.js?v=20261115162350"></script>
+    <script src="config.js?v=20261115165353"></script>
+    <script src="app.js?v=20261115165353"></script>
   </body>
 </html>

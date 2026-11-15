@@ -147,7 +147,7 @@
     padding: 12px 10px;
     border-bottom: 1px solid var(--line);
   }
-  .slot-time { width: 72px; flex-shrink: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .slot-time { width: 82px; flex-shrink: 0; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .slot-body { flex: 1; min-width: 0; }
   .slot-free { color: var(--ok); font-weight: 600; }
   .slot-muted { color: var(--muted); }
@@ -274,6 +274,16 @@
   #detail-actions .btn { margin-top: 10px; }
   .move-slots { margin-top: 12px; }
   .pill.cancelled, .pill.no-show { background: #fde8e8; color: var(--danger); }
+
+  /* ---------- Check-in, late, no-show, needs status ---------- */
+  .row-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .row-actions .btn.small { margin: 0; padding: 6px 10px; font-size: 13px; }
+  .btn.arrive { border-color: var(--ok); color: var(--ok); }
+  .btn.noshow { border-color: var(--danger); color: var(--danger); }
+  .pill.late { background: #ffe8cc; color: #a34700; }
+  .noshow-note { display: block; color: var(--muted); font-size: 13px; }
+  .btn.needs { background: var(--warn-bg); border-color: #f3d19c; color: #7a4a00; }
+  #unresolved-list .affected-actions { margin-top: 8px; }
 
   .pill.booked { background: #e8f0fe; color: var(--primary); }
   .pill.arrived { background: #e3f4e8; color: var(--ok); }
