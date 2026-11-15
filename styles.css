@@ -107,3 +107,58 @@
   .pill.approved { background: #e3f4e8; color: var(--ok); }
   .pill.pending { background: var(--warn-bg); color: #9a5b00; }
   .pill.rejected, .pill.removed { background: #fde8e8; color: var(--danger); }
+
+  /* ---------- Day view ---------- */
+  .topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .topbar-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .topbar-actions .btn.small { margin: 0; }
+  .datebar { display: flex; align-items: center; gap: 8px; }
+  .btn.nav {
+    width: 48px;
+    margin: 0;
+    padding: 10px 0;
+    font-size: 24px;
+    line-height: 1;
+  }
+  .date-center { flex: 1; text-align: center; min-width: 0; }
+  .day-label { font-size: 20px; font-weight: 700; }
+  #day-picker {
+    margin-top: 6px;
+    padding: 6px 8px;
+    font-size: 15px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    max-width: 100%;
+  }
+  #day-today { margin-top: 12px; }
+  .day-hours { color: var(--muted); font-weight: 600; margin: 16px 0 8px; }
+  .small-text { font-size: 13px; text-align: center; margin-top: 12px; }
+
+  .slots { list-style: none; padding: 0; margin: 0; }
+  .slot {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 12px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  .slot-time { width: 72px; flex-shrink: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .slot-body { flex: 1; min-width: 0; }
+  .slot-free { color: var(--ok); font-weight: 600; }
+  .slot-muted { color: var(--muted); }
+  .slot.unavailable { background: #f2f3f5; }
+  .slot-name { font-weight: 600; overflow-wrap: anywhere; }
+  .slot-name + .slot-name { margin-top: 4px; }
+  .slot.extra, .slot.offgrid { background: #fffaf0; }
+  .slot-warning, .slot-empty { padding: 12px 10px; color: var(--muted); }
+  .slot-warning { color: #9a5b00; font-weight: 600; }
+  .pill.booked { background: #e8f0fe; color: var(--primary); }
+  .pill.arrived { background: #e3f4e8; color: var(--ok); }
+  .pill.extra { background: var(--warn-bg); color: #9a5b00; }
+  .pill.offgrid { background: #fde8e8; color: var(--danger); }

@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Clinic booking">
     <title>Clinic booking</title>
-    <link rel="stylesheet" href="styles.css?v=20261115140800">
+    <link rel="stylesheet" href="styles.css?v=20261115142624">
   </head>
   <body>
     <main class="wrap">
@@ -41,15 +41,32 @@
         <button id="pending-back" class="btn link">Use a different PIN</button>
       </section>
 
-      <!-- Logged in (the day view replaces this in milestone 3) -->
-      <section id="screen-home" class="card" hidden>
-        <h1>Clinic booking</h1>
-        <p>Logged in as <strong id="home-role"></strong></p>
-        <p class="muted">The day view comes in milestone 3.</p>
-        <button id="btn-devices" class="btn" hidden>
-          Devices <span id="badge" class="badge" hidden></span>
-        </button>
-        <button id="btn-logout" class="btn">Log out</button>
+      <!-- Main screen after login: the day view -->
+      <section id="screen-day" hidden>
+        <div class="topbar">
+          <span class="muted">Logged in as <strong id="who"></strong></span>
+          <span class="topbar-actions">
+            <button id="btn-devices" class="btn small" hidden>
+              Devices <span id="badge" class="badge" hidden></span>
+            </button>
+            <button id="btn-logout" class="btn small">Log out</button>
+          </span>
+        </div>
+
+        <div class="card">
+          <div class="datebar">
+            <button id="day-prev" class="btn nav" aria-label="Previous day">‹</button>
+            <div class="date-center">
+              <div id="day-label" class="day-label"></div>
+              <input id="day-picker" type="date" aria-label="Pick a date">
+            </div>
+            <button id="day-next" class="btn nav" aria-label="Next day">›</button>
+          </div>
+          <button id="day-today" class="btn small" hidden>Back to today</button>
+          <p id="day-hours" class="day-hours"></p>
+          <ul id="slot-list" class="slots"></ul>
+          <p id="day-updated" class="muted small-text"></p>
+        </div>
       </section>
 
       <!-- Admin only: approve, reject and remove devices -->
@@ -71,7 +88,7 @@
       </section>
     </main>
 
-    <script src="config.js?v=20261115140800"></script>
-    <script src="app.js?v=20261115140800"></script>
+    <script src="config.js?v=20261115142624"></script>
+    <script src="app.js?v=20261115142624"></script>
   </body>
 </html>

@@ -80,7 +80,7 @@
   }
 
   function show(name) {
-    ['loading', 'pin', 'pending', 'home', 'devices'].forEach(function (n) {
+    ['loading', 'pin', 'pending', 'day', 'devices'].forEach(function (n) {
       $('screen-' + n).hidden = (n !== name);
     });
   }
@@ -120,12 +120,14 @@
     $('pin').focus();
   }
 
+  /** After login: the day view is the main screen. */
   function showHome(session) {
     state.role = session.role;
-    $('home-role').textContent = session.role === 'admin' ? 'Admin' : 'Receptionist';
+    $('who').textContent = session.role === 'admin' ? 'Admin' : 'Receptionist';
     $('btn-devices').hidden = session.role !== 'admin';
     setBadge(session.pendingDevices || 0);
-    show('home');
+    show('day');
+    loadDay();
   }
 
   function setBadge(count) {
@@ -279,7 +281,7 @@
   }
 
   $('btn-devices').addEventListener('click', openDevices);
-  $('devices-back').addEventListener('click', function () { show('home'); });
+  $('devices-back').addEventListener('click', function () { show('day'); loadDay(); });
 
   $('btn-logout-all').addEventListener('click', function () {
     if (!confirm('Log out every other device? They will need the PIN again.')) return;
@@ -289,6 +291,145 @@
       .then(function (r) { $('devices-msg').textContent = 'Logged out ' + r.loggedOut + ' session(s).'; })
       .catch(handleError)
       .then(function () { b.disabled = false; });
+  });
+
+  /* ---------- Day view ---------- */
+
+  // The server sends every day from today to the end of the booking window
+  // in one go, so moving between days is instant.
+  var view = { data: null, date: null, loading: false };
+
+  /** Asks the server for the latest slots and bookings, then redraws. */
+  function loadDay() {
+    if (!state.token || view.loading) return Promise.resolve();
+    view.loading = true;
+    return call('getDayView', state.token, state.deviceId)
+      .then(function (data) {
+        view.data = data;
+        var dates = data.days.map(function (d) { return d.date; });
+        if (dates.indexOf(view.date) === -1) view.date = data.today;
+        banner('');
+        renderDay();
+        $('day-updated').textContent = 'Updated ' + nowInIndia().label;
+      })
+      .catch(handleError)
+      .then(function () { view.loading = false; });
+  }
+
+  /** The current time in India, whatever the device's own clock zone is. */
+  function nowInIndia() {
+    var parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+    }).format(new Date()).split(':');
+    var minutes = Number(parts[0]) * 60 + Number(parts[1]);
+    return { minutes: minutes, label: to12h(parts[0] + ':' + parts[1]) };
+  }
+
+  /** "16:15" → "4:15 pm" */
+  function to12h(hhmm) {
+    var p = String(hhmm).split(':');
+    var h = Number(p[0]);
+    if (isNaN(h) || p.length < 2) return hhmm;
+    return ((h + 11) % 12 + 1) + ':' + p[1] + (h < 12 ? ' am' : ' pm');
+  }
+
+  function toMinutes(hhmm) {
+    var p = String(hhmm).split(':');
+    return Number(p[0]) * 60 + Number(p[1]);
+  }
+
+  function renderDay() {
+    var data = view.data;
+    var index = data.days.map(function (d) { return d.date; }).indexOf(view.date);
+    var day = data.days[index];
+    var isToday = day.date === data.today;
+
+    $('day-label').textContent = (isToday ? 'Today · ' : '') + day.label;
+    $('day-picker').min = data.days[0].date;
+    $('day-picker').max = data.days[data.days.length - 1].date;
+    $('day-picker').value = day.date;
+    $('day-prev').disabled = index === 0;
+    $('day-next').disabled = index === data.days.length - 1;
+    $('day-today').hidden = isToday;
+
+    if (day.open) {
+      $('day-hours').textContent = 'Open ' + day.hours.split(', ').map(function (r) {
+        var p = r.split('-');
+        return to12h(p[0]) + ' – ' + to12h(p[1]);
+      }).join(', ') + ' · ' + day.slotMinutes + '-min slots';
+    } else {
+      $('day-hours').textContent = day.closedReason + (day.note ? ': ' + day.note : '');
+    }
+
+    var now = nowInIndia().minutes;
+    var list = $('slot-list');
+    list.textContent = '';
+    var shown = 0;
+    day.rows.forEach(function (row) {
+      // A slot that has already started is never offered, even today.
+      // Rows with a booking are always shown.
+      var empty = row.kind === 'free' || row.kind === 'unavailable';
+      if (isToday && empty && toMinutes(row.time) <= now) return;
+      list.appendChild(slotRow(row));
+      shown++;
+    });
+
+    if (!day.open && shown > 0) {
+      list.insertBefore(textEl('li', 'These bookings are on a closed day. They need to be moved.', 'slot-warning'), list.firstChild);
+    } else if (day.open && shown === 0) {
+      list.appendChild(textEl('li', isToday ? 'No more slots today.' : 'No slots on this day.', 'slot-empty'));
+    }
+  }
+
+  function slotRow(row) {
+    var li = document.createElement('li');
+    li.className = 'slot ' + row.kind;
+    li.appendChild(textEl('span', to12h(row.time), 'slot-time'));
+    var body = document.createElement('span');
+    body.className = 'slot-body';
+    if (row.kind === 'free') {
+      body.appendChild(textEl('span', 'Free', 'slot-free'));
+    } else if (row.kind === 'unavailable') {
+      body.appendChild(textEl('span', 'Unavailable', 'slot-muted'));
+    } else {
+      row.bookings.forEach(function (b) {
+        var line = textEl('div', b.name, 'slot-name');
+        line.appendChild(textEl('span', b.status === 'arrived' ? 'Arrived' : 'Booked', 'pill ' + b.status));
+        if (row.kind === 'extra') line.appendChild(textEl('span', 'Extra', 'pill extra'));
+        if (row.kind === 'offgrid') line.appendChild(textEl('span', 'Off-grid', 'pill offgrid'));
+        body.appendChild(line);
+      });
+    }
+    li.appendChild(body);
+    return li;
+  }
+
+  function moveDay(step) {
+    var dates = view.data.days.map(function (d) { return d.date; });
+    var i = dates.indexOf(view.date) + step;
+    if (i >= 0 && i < dates.length) {
+      view.date = dates[i];
+      renderDay();
+    }
+  }
+
+  $('day-prev').addEventListener('click', function () { moveDay(-1); });
+  $('day-next').addEventListener('click', function () { moveDay(1); });
+  $('day-today').addEventListener('click', function () { view.date = view.data.today; renderDay(); });
+  $('day-picker').addEventListener('change', function () {
+    var picked = $('day-picker').value;
+    var known = view.data.days.some(function (d) { return d.date === picked; });
+    view.date = known ? picked : view.data.today;
+    renderDay();
+  });
+
+  // Keep every device up to date: every 60 seconds, and when the app is
+  // opened again after being in the background.
+  setInterval(function () {
+    if (!$('screen-day').hidden && document.visibilityState === 'visible') loadDay();
+  }, 60 * 1000);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && !$('screen-day').hidden) loadDay();
   });
 
   /* ---------- Start ---------- */
