@@ -449,6 +449,10 @@
     $('edit-close').hidden = !day.open;
     $('edit-reopen').hidden = !day.closedForLeave;
     $('edit-reset').hidden = !day.custom;
+    // A "from now on" change that starts on this day can be undone here.
+    var fromNow = day.fromNowChanges || [];
+    $('edit-undo').hidden = fromNow.length === 0;
+    $('edit-undo').textContent = 'Undo the "from now on" change that starts this day (' + fromNow.join(' and ') + ')';
     showEditPart('edit-menu');
     $('edit-panel').hidden = false;
     $('day-edit').hidden = true;
@@ -630,8 +634,12 @@
   $('edit-reopen').addEventListener('click', function () {
     saveChange({ action: 'reopen', scope: 'day' }, $('edit-reopen'));
   });
+  $('edit-undo').addEventListener('click', function () {
+    if (!confirm('Undo this "from now on" change? Every day from this date goes back to how it was before.')) return;
+    saveChange({ action: 'undoFromNow', scope: 'day' }, $('edit-undo'));
+  });
   $('edit-reset').addEventListener('click', function () {
-    if (!confirm('Undo every change for this day and go back to the normal slots?')) return;
+    if (!confirm('Undo the changes made to this day only, and go back to the clinic\'s normal slots?')) return;
     saveChange({ action: 'reset', scope: 'day' }, $('edit-reset'));
   });
 
