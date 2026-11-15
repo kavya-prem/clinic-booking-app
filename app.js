@@ -592,6 +592,10 @@
     reasons.textContent = '';
     reasons.appendChild(new Option('Pick a reason', ''));
     (view.data.reasons || []).forEach(function (r) { reasons.appendChild(new Option(r, r)); });
+    // No visit reasons yet (the admin adds them in Settings): leave the field out.
+    var noReasons = !(view.data.reasons || []).length;
+    reasons.hidden = noReasons;
+    $('book-reason-label').hidden = noReasons;
     document.querySelector('input[name="book-channel"][value="' + channel + '"]').checked = true;
     showBookPart('form');
     show('book');
@@ -641,7 +645,7 @@
       channel: document.querySelector('input[name="book-channel"]:checked').value
     };
     if (!draft.name) { $('book-msg').textContent = 'Enter the patient\'s name.'; return; }
-    if (!draft.reason) { $('book-msg').textContent = 'Pick a visit reason.'; return; }
+    if (!draft.reason && !$('book-reason').hidden) { $('book-msg').textContent = 'Pick a visit reason.'; return; }
     if ($('book-cc').value === 'other' && !draft.countryCode) {
       $('book-msg').textContent = 'Type the country code, for example 49 for Germany.';
       return;
@@ -682,7 +686,7 @@
     var dl = $('confirm-details');
     dl.textContent = '';
     var rows = [['Patient', b.name], ['When', b.dateLabel + ', ' + to12h(b.time) + (b.slotType === 'extra' ? ' (extra)' : '')],
-     ['Reason', b.reason], ['How', b.channel === 'walk-in' ? 'Walk-in' : 'Phone call'], ['Comments', b.comments || '–']];
+     ['Reason', b.reason || '–'], ['How', b.channel === 'walk-in' ? 'Walk-in' : 'Phone call'], ['Comments', b.comments || '–']];
     if (b.mode === 'paper') {
       rows.splice(2, 0, ['Status', b.status === 'booked' ? 'Booked (visit not yet happened)' : statusLabel(b.status) + ' (from paper)']);
     }
@@ -961,7 +965,7 @@
     var statusDd;
     [['Patient', b.name], ['Mobile', b.mobile ? spacedPhone(b.mobile) : 'Not recorded'],
      ['When', b.dateLabel + ', ' + to12h(b.time) + (b.type === 'extra' ? ' (extra)' : '')],
-     ['Status', ''], ['Reason', b.reason], ['Comments', b.comments || '–'],
+     ['Status', ''], ['Reason', b.reason || '–'], ['Comments', b.comments || '–'],
      ['Booked', (b.channel === 'walk-in' ? 'Walk-in' : 'Phone') + ', ' + b.createdAt + ' by ' + b.createdBy]]
       .forEach(function (pair) {
         dl.appendChild(textEl('dt', pair[0]));
@@ -1086,9 +1090,11 @@
     var reasons = $('edit-reason');
     reasons.textContent = '';
     var list = (view.data.reasons || []).slice();
-    if (list.indexOf(b.reason) === -1) list.unshift(b.reason);
+    if (b.reason && list.indexOf(b.reason) === -1) list.unshift(b.reason);
     list.forEach(function (r) { reasons.appendChild(new Option(r, r)); });
     reasons.value = b.reason;
+    reasons.hidden = !list.length;
+    $('edit-reason-label').hidden = !list.length;
     $('edit-comments').value = b.comments;
     $('edit-msg').textContent = '';
     $('detail-actions').hidden = true;
@@ -1225,19 +1231,33 @@
 
     var reasons = $('set-reasons');
     reasons.textContent = '';
+    $('set-no-reasons').hidden = s.reasons.length > 0;
     s.reasons.forEach(function (r) {
       var li = document.createElement('li');
       li.className = 'reason-row';
       li.appendChild(textEl('span', r.reason, r.active ? '' : 'reason-off'));
+      var buttons = document.createElement('span');
+      buttons.className = 'reason-buttons';
       var toggle = textEl('button', r.active ? 'Switch off' : 'Switch on', 'btn small');
       toggle.type = 'button';
       toggle.addEventListener('click', function () {
         toggle.disabled = true;
         call('setReasonActive', state.token, state.deviceId, r.reason, !r.active)
-          .then(function (res) { setMessage(res.message, true); return loadSettings(); })
+          .then(function (res) { setMessage(res.message, true); loadDay(); return loadSettings(); })
           .catch(function (err) { toggle.disabled = false; settingsError(err); });
       });
-      li.appendChild(toggle);
+      var remove = textEl('button', 'Remove', 'btn small danger-text');
+      remove.type = 'button';
+      remove.addEventListener('click', function () {
+        if (!confirm('Remove "' + r.reason + '" from the list? Bookings that already have it keep it.')) return;
+        remove.disabled = true;
+        call('removeReason', state.token, state.deviceId, r.reason)
+          .then(function (res) { setMessage(res.message, true); loadDay(); return loadSettings(); })
+          .catch(function (err) { remove.disabled = false; settingsError(err); });
+      });
+      buttons.appendChild(toggle);
+      buttons.appendChild(remove);
+      li.appendChild(buttons);
       reasons.appendChild(li);
     });
 
@@ -1390,14 +1410,35 @@
   $('btn-settings').addEventListener('click', openSettings);
   $('settings-back').addEventListener('click', function () { backToDay(''); });
   $('set-affected-done').addEventListener('click', function () { $('set-affected').hidden = true; });
+  /** Adds every filled-in blank field, one after another. */
   $('set-add-reason').addEventListener('click', function () {
-    var name = $('set-new-reason').value.trim();
-    if (!name) { setMessage('Type the new visit reason.', false); return; }
+    var fields = Array.prototype.slice.call(document.querySelectorAll('.new-reason'));
+    var names = fields.map(function (f) { return f.value.trim(); }).filter(Boolean);
+    if (!names.length) { setMessage('Type at least one visit reason in the empty fields.', false); return; }
     $('set-add-reason').disabled = true;
-    call('addReason', state.token, state.deviceId, name)
-      .then(function (r) { $('set-new-reason').value = ''; setMessage(r.message, true); loadDay(); return loadSettings(); })
-      .catch(settingsError)
-      .then(function () { $('set-add-reason').disabled = false; });
+    var added = [];
+    var next = function () {
+      var name = names.shift();
+      if (!name) return Promise.resolve();
+      return call('addReason', state.token, state.deviceId, name).then(function () { added.push(name); return next(); });
+    };
+    next()
+      .then(function () { setMessage('Added: ' + added.join(', ') + '.', true); })
+      .catch(function (err) { if (added.length) loadSettings(); settingsError(err); })
+      .then(function () {
+        fields.forEach(function (f) { if (added.indexOf(f.value.trim()) !== -1) f.value = ''; });
+        $('set-add-reason').disabled = false;
+        loadDay();
+        return loadSettings();
+      });
+  });
+  $('set-more-reasons').addEventListener('click', function () {
+    var input = document.createElement('input');
+    input.className = 'text-input new-reason';
+    input.maxLength = 40;
+    input.placeholder = 'New visit reason';
+    $('set-new-reasons').appendChild(input);
+    input.focus();
   });
 
   /* ---------- Edit day ---------- */
@@ -1678,6 +1719,29 @@
   }, 60 * 1000);
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible' && !$('screen-day').hidden) loadDay();
+  });
+
+  /* ---------- Always run the newest version ---------- */
+
+  /**
+   * GitHub Pages lets phones keep the page for up to 10 minutes. On opening
+   * (and when coming back to the app) we ask for version.json, which is
+   * never kept, and reload once if a newer version has been published.
+   */
+  function checkForNewVersion() {
+    if (!window.APP_VERSION || window.APP_VERSION.indexOf('APP_VERSION') !== -1) return;  // local preview
+    fetch('version.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (latest) {
+        if (latest && latest.v && latest.v !== window.APP_VERSION) {
+          location.replace(location.pathname + '?v=' + latest.v);
+        }
+      })
+      .catch(function () {});
+  }
+  checkForNewVersion();
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') checkForNewVersion();
   });
 
   /* ---------- Start ---------- */

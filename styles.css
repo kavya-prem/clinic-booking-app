@@ -111,12 +111,13 @@
   /* ---------- Day view ---------- */
   .topbar {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
     gap: 8px;
     margin-bottom: 12px;
   }
-  .topbar-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .topbar-actions { display: flex; flex-wrap: wrap; gap: 6px; }
   .topbar-actions .btn.small { margin: 0; }
   .datebar { display: flex; align-items: center; gap: 8px; }
   .btn.nav {
@@ -299,6 +300,9 @@
   .reason-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .reason-row .btn.small { margin: 0; }
   .reason-off { color: var(--muted); text-decoration: line-through; }
+  .reason-buttons { display: flex; gap: 6px; flex-shrink: 0; }
+  .reason-buttons .btn { white-space: nowrap; }
+  .new-reasons .text-input { margin-top: 8px; }
 
   .pill.booked { background: #e8f0fe; color: var(--primary); }
   .pill.arrived { background: #e3f4e8; color: var(--ok); }

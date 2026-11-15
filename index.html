@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Clinic booking">
     <title>Clinic booking</title>
-    <link rel="stylesheet" href="styles.css?v=20261115174004">
+    <link rel="stylesheet" href="styles.css?v=20261115174819">
   </head>
   <body>
     <main class="wrap">
@@ -189,7 +189,7 @@
                    autocomplete="off" placeholder="Number">
           </div>
 
-          <label for="book-reason">Visit reason</label>
+          <label for="book-reason" id="book-reason-label">Visit reason</label>
           <select id="book-reason" class="text-input"></select>
 
           <label for="book-comments">Comments (optional)</label>
@@ -294,7 +294,7 @@
                    placeholder="+code" aria-label="Country code (other)" hidden>
             <input id="edit-mobile" class="text-input" type="tel" inputmode="numeric" maxlength="20" autocomplete="off">
           </div>
-          <label for="edit-reason">Visit reason</label>
+          <label for="edit-reason" id="edit-reason-label">Visit reason</label>
           <select id="edit-reason" class="text-input"></select>
           <label for="edit-comments">Comments (optional)</label>
           <textarea id="edit-comments" class="text-input" rows="2" maxlength="200"
@@ -375,12 +375,17 @@
 
         <div class="set-block">
           <p class="edit-title">Visit reasons</p>
-          <p class="muted">Switch a reason off instead of renaming it, so old bookings keep their reason.</p>
+          <p class="muted">The reasons staff pick from when booking. Old bookings keep their reason even if
+            it is switched off or removed here.</p>
           <ul id="set-reasons" class="list"></ul>
-          <div class="phone-row">
-            <input id="set-new-reason" class="text-input" maxlength="40" placeholder="New visit reason">
-            <button id="set-add-reason" class="btn small">Add</button>
+          <p id="set-no-reasons" class="muted" hidden>No visit reasons yet. Add the clinic's reasons below.</p>
+          <div id="set-new-reasons" class="new-reasons">
+            <input class="text-input new-reason" maxlength="40" placeholder="New visit reason">
+            <input class="text-input new-reason" maxlength="40" placeholder="New visit reason">
+            <input class="text-input new-reason" maxlength="40" placeholder="New visit reason">
           </div>
+          <button id="set-more-reasons" class="btn link" type="button">+ More fields</button>
+          <button id="set-add-reason" class="btn small primary">Add reasons</button>
         </div>
 
         <div class="set-block" id="set-scheduled-block" hidden>
@@ -416,7 +421,8 @@
       </div>
     </main>
 
-    <script src="config.js?v=20261115174004"></script>
-    <script src="app.js?v=20261115174004"></script>
+    <script>window.APP_VERSION = '20261115174819';</script>
+    <script src="config.js?v=20261115174819"></script>
+    <script src="app.js?v=20261115174819"></script>
   </body>
 </html>
