@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Clinic booking">
     <title>Clinic booking</title>
-    <link rel="stylesheet" href="styles.css?v=20261115142624">
+    <link rel="stylesheet" href="styles.css?v=20261115145441">
   </head>
   <body>
     <main class="wrap">
@@ -62,7 +62,67 @@
             </div>
             <button id="day-next" class="btn nav" aria-label="Next day">›</button>
           </div>
-          <button id="day-today" class="btn small" hidden>Back to today</button>
+          <div class="day-actions">
+            <button id="day-today" class="btn small" hidden>Back to today</button>
+            <button id="day-edit" class="btn small" hidden>Edit day</button>
+          </div>
+          <p id="day-msg" class="msg ok" role="status"></p>
+
+          <!-- Edit day: change hours, block slots, close, reopen, reset -->
+          <div id="edit-panel" class="edit-panel" hidden>
+            <div id="edit-menu">
+              <p class="edit-title">What do you want to change?</p>
+              <button id="edit-hours" class="btn">Change hours (add or remove slots)</button>
+              <button id="edit-block" class="btn">Block or unblock slots</button>
+              <button id="edit-close" class="btn">Close this day (leave)</button>
+              <button id="edit-reopen" class="btn">Reopen this day</button>
+              <button id="edit-reset" class="btn">Reset to normal</button>
+              <button type="button" class="btn link edit-cancel">Cancel</button>
+            </div>
+
+            <form id="form-hours" hidden>
+              <p class="edit-title">Clinic hours</p>
+              <div class="time-pair">
+                <label>From <select id="hours-start"></select></label>
+                <label>To <select id="hours-end"></select></label>
+              </div>
+              <fieldset class="scope">
+                <label><input type="radio" name="hours-scope" value="day" checked> Only this day</label>
+                <label><input type="radio" name="hours-scope" value="fromNow"> From now on (every working day from this date)</label>
+              </fieldset>
+              <button type="submit" class="btn primary">Save hours</button>
+              <button type="button" class="btn link edit-back">← Back</button>
+            </form>
+
+            <form id="form-block" hidden>
+              <p class="edit-title">Tap slots to block or unblock them</p>
+              <div id="block-chips" class="chips"></div>
+              <fieldset class="scope">
+                <label><input type="radio" name="block-scope" value="day" checked> Only this day</label>
+                <label><input type="radio" name="block-scope" value="fromNow"> From now on (every working day from this date)</label>
+              </fieldset>
+              <button type="submit" class="btn primary">Save blocked slots</button>
+              <button type="button" class="btn link edit-back">← Back</button>
+            </form>
+
+            <form id="form-close" hidden>
+              <p class="edit-title">Close this day</p>
+              <label for="close-note">Note (optional)</label>
+              <input id="close-note" class="text-input" maxlength="100" placeholder="For example: Doctor on leave">
+              <button type="submit" class="btn primary">Close this day</button>
+              <button type="button" class="btn link edit-back">← Back</button>
+            </form>
+          </div>
+
+          <!-- After a change: patients whose booking lost its slot -->
+          <div id="affected" class="affected" hidden>
+            <p class="edit-title">Patients to contact</p>
+            <p class="muted">These bookings no longer have a slot. Message each patient, then move or
+              cancel the booking (moving bookings comes in milestone 5).</p>
+            <ul id="affected-list" class="list"></ul>
+            <button id="affected-done" class="btn small">Done</button>
+          </div>
+
           <p id="day-hours" class="day-hours"></p>
           <ul id="slot-list" class="slots"></ul>
           <p id="day-updated" class="muted small-text"></p>
@@ -88,7 +148,7 @@
       </section>
     </main>
 
-    <script src="config.js?v=20261115142624"></script>
-    <script src="app.js?v=20261115142624"></script>
+    <script src="config.js?v=20261115145441"></script>
+    <script src="app.js?v=20261115145441"></script>
   </body>
 </html>

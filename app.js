@@ -351,6 +351,9 @@
     $('day-prev').disabled = index === 0;
     $('day-next').disabled = index === data.days.length - 1;
     $('day-today').hidden = isToday;
+    // Edit is offered on working days and on days that already have changes.
+    $('day-edit').hidden = !(day.workingDay || day.custom);
+    if (editState.date && editState.date !== day.date) closeEdit();
 
     if (day.open) {
       $('day-hours').textContent = 'Open ' + day.hours.split(', ').map(function (r) {
@@ -421,6 +424,215 @@
     var known = view.data.days.some(function (d) { return d.date === picked; });
     view.date = known ? picked : view.data.today;
     renderDay();
+  });
+
+  /* ---------- Edit day ---------- */
+
+  var editState = { date: null, blocked: {} };
+
+  function currentDay() {
+    return view.data.days.filter(function (d) { return d.date === view.date; })[0];
+  }
+
+  function showEditPart(part) {
+    ['edit-menu', 'form-hours', 'form-block', 'form-close'].forEach(function (id) {
+      $(id).hidden = id !== part;
+    });
+  }
+
+  function openEdit() {
+    var day = currentDay();
+    editState.date = day.date;
+    $('day-msg').textContent = '';
+    $('edit-hours').hidden = !(day.workingDay || day.custom);
+    $('edit-block').hidden = !day.open;
+    $('edit-close').hidden = !day.open;
+    $('edit-reopen').hidden = !day.closedForLeave;
+    $('edit-reset').hidden = !day.custom;
+    showEditPart('edit-menu');
+    $('edit-panel').hidden = false;
+    $('day-edit').hidden = true;
+  }
+
+  function closeEdit() {
+    editState.date = null;
+    $('edit-panel').hidden = true;
+    if (view.data) $('day-edit').hidden = !(currentDay().workingDay || currentDay().custom);
+  }
+
+  /** Time choices every 15 minutes from 6:00 am to 11:00 pm. */
+  function fillTimeSelect(select, selected) {
+    select.textContent = '';
+    for (var m = 6 * 60; m <= 23 * 60; m += 15) {
+      var hhmm = ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + (m % 60)).slice(-2);
+      var option = document.createElement('option');
+      option.value = hhmm;
+      option.textContent = to12h(hhmm);
+      if (hhmm === selected) option.selected = true;
+      select.appendChild(option);
+    }
+  }
+
+  function openHours() {
+    var day = currentDay();
+    var first = (day.hours || '16:00-19:00').split(', ')[0].split('-');
+    fillTimeSelect($('hours-start'), first[0]);
+    fillTimeSelect($('hours-end'), first[1]);
+    showEditPart('form-hours');
+  }
+
+  function openBlock() {
+    var day = currentDay();
+    editState.blocked = {};
+    day.rows.forEach(function (r) { if (r.blocked) editState.blocked[r.time] = true; });
+    var chips = $('block-chips');
+    chips.textContent = '';
+    day.slotTimes.forEach(function (time) {
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip' + (editState.blocked[time] ? ' blocked' : '');
+      chip.textContent = to12h(time);
+      chip.setAttribute('aria-pressed', editState.blocked[time] ? 'true' : 'false');
+      chip.addEventListener('click', function () {
+        editState.blocked[time] = !editState.blocked[time];
+        chip.classList.toggle('blocked', editState.blocked[time]);
+        chip.setAttribute('aria-pressed', editState.blocked[time] ? 'true' : 'false');
+      });
+      chips.appendChild(chip);
+    });
+    showEditPart('form-block');
+  }
+
+  function checkedValue(name) {
+    var el = document.querySelector('input[name="' + name + '"]:checked');
+    return el ? el.value : 'day';
+  }
+
+  /**
+   * Sends a change. If it would take a slot from a booked patient, the
+   * server asks first; we show the list and send it again once confirmed.
+   */
+  function saveChange(change, button) {
+    change.date = editState.date;
+    button.disabled = true;
+    return call('changeDayAvailability', state.token, state.deviceId, change)
+      .then(function (r) {
+        if (r.needsConfirm) {
+          var lines = r.affected.map(function (a) {
+            return '• ' + a.name + ', ' + a.dateLabel + ' ' + to12h(a.time);
+          }).join('\n');
+          var question = r.affected.length + (r.affected.length === 1 ? ' booking is' : ' bookings are') +
+            ' affected:\n' + lines + '\n\nSave anyway? You can message these patients next.';
+          if (!confirm(question)) return null;
+          change.confirmed = true;
+          return call('changeDayAvailability', state.token, state.deviceId, change);
+        }
+        return r;
+      })
+      .then(function (r) {
+        if (!r) return;
+        closeEdit();
+        $('day-msg').textContent = r.message;
+        showAffected(r.affected || []);
+        return loadDay();
+      })
+      .catch(handleError)
+      .then(function () { button.disabled = false; });
+  }
+
+  /* ---------- Patients to contact (WhatsApp) ---------- */
+
+  function whatsappMessage(a) {
+    // Draft wording: to be confirmed with the clinic (Open questions in the spec).
+    return 'Hello ' + a.name + ', this is a message from the clinic. Your appointment on ' +
+      a.dateLabel + ' at ' + to12h(a.time) + ' needs to be changed because the doctor is not ' +
+      'available at that time. Please reply to this message or call us to choose a new time. Thank you.';
+  }
+
+  /** wa.me needs the number with the country code (91 for India) and digits only. */
+  function whatsappLink(mobile, text) {
+    var digits = String(mobile || '').replace(/\D/g, '');
+    if (digits.length === 10) digits = '91' + digits;
+    if (!/^91\d{10}$/.test(digits)) return null;
+    return 'https://wa.me/' + digits + '?text=' + encodeURIComponent(text);
+  }
+
+  function copyText(text, button) {
+    var done = function () {
+      button.textContent = 'Copied ✓';
+      setTimeout(function () { button.textContent = 'Copy message'; }, 2000);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { prompt('Copy this message:', text); });
+    } else {
+      prompt('Copy this message:', text);
+    }
+  }
+
+  function showAffected(list) {
+    var ul = $('affected-list');
+    ul.textContent = '';
+    $('affected').hidden = list.length === 0;
+    list.forEach(function (a) {
+      var text = whatsappMessage(a);
+      var li = document.createElement('li');
+      li.appendChild(textEl('div', a.name, 'title'));
+      li.appendChild(textEl('div', a.dateLabel + ', ' + to12h(a.time), 'muted'));
+      li.appendChild(textEl('div', 'Mobile: ' + (a.mobile || 'not recorded'), 'muted'));
+      var actions = document.createElement('div');
+      actions.className = 'affected-actions';
+      var link = whatsappLink(a.mobile, text);
+      if (link) {
+        var wa = textEl('a', 'WhatsApp', 'btn small whatsapp');
+        wa.href = link;
+        wa.target = '_blank';
+        wa.rel = 'noopener';
+        actions.appendChild(wa);
+      }
+      var copy = textEl('button', 'Copy message', 'btn small');
+      copy.type = 'button';
+      copy.addEventListener('click', function () { copyText(text, copy); });
+      actions.appendChild(copy);
+      li.appendChild(actions);
+      ul.appendChild(li);
+    });
+  }
+
+  $('day-edit').addEventListener('click', openEdit);
+  $('edit-hours').addEventListener('click', openHours);
+  $('edit-block').addEventListener('click', openBlock);
+  $('edit-close').addEventListener('click', function () { $('close-note').value = ''; showEditPart('form-close'); });
+  Array.prototype.forEach.call(document.querySelectorAll('.edit-back'), function (b) {
+    b.addEventListener('click', function () { showEditPart('edit-menu'); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.edit-cancel'), function (b) {
+    b.addEventListener('click', closeEdit);
+  });
+  $('affected-done').addEventListener('click', function () { $('affected').hidden = true; });
+
+  $('form-hours').addEventListener('submit', function (e) {
+    e.preventDefault();
+    saveChange({ action: 'hours', scope: checkedValue('hours-scope'),
+                 start: $('hours-start').value, end: $('hours-end').value },
+               e.submitter || $('form-hours').querySelector('[type=submit]'));
+  });
+  $('form-block').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var blocked = Object.keys(editState.blocked).filter(function (t) { return editState.blocked[t]; });
+    saveChange({ action: 'blocked', scope: checkedValue('block-scope'), blocked: blocked },
+               e.submitter || $('form-block').querySelector('[type=submit]'));
+  });
+  $('form-close').addEventListener('submit', function (e) {
+    e.preventDefault();
+    saveChange({ action: 'close', scope: 'day', note: $('close-note').value },
+               e.submitter || $('form-close').querySelector('[type=submit]'));
+  });
+  $('edit-reopen').addEventListener('click', function () {
+    saveChange({ action: 'reopen', scope: 'day' }, $('edit-reopen'));
+  });
+  $('edit-reset').addEventListener('click', function () {
+    if (!confirm('Undo every change for this day and go back to the normal slots?')) return;
+    saveChange({ action: 'reset', scope: 'day' }, $('edit-reset'));
   });
 
   // Keep every device up to date: every 60 seconds, and when the app is
