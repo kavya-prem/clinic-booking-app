@@ -80,7 +80,7 @@
   }
 
   function show(name) {
-    ['loading', 'pin', 'pending', 'day', 'book', 'search', 'detail', 'unresolved', 'devices'].forEach(function (n) {
+    ['loading', 'pin', 'pending', 'day', 'book', 'search', 'detail', 'unresolved', 'settings', 'devices'].forEach(function (n) {
       $('screen-' + n).hidden = (n !== name);
     });
   }
@@ -125,6 +125,7 @@
     state.role = session.role;
     $('who').textContent = session.role === 'admin' ? 'Admin' : 'Receptionist';
     $('btn-devices').hidden = session.role !== 'admin';
+    $('btn-settings').hidden = session.role !== 'admin';
     setBadge(session.pendingDevices || 0);
     show('day');
     loadDay();
@@ -1153,9 +1154,7 @@
         var label = day.label + ' at ' + to12h(r.time);
         if (!confirm('Move ' + detail.booking.name + ' to ' + label + '?')) return;
         runChange('rescheduleBooking', [{ date: date, time: r.time }], chip, function (res) {
-          showNotify('Hello ' + res.booking.name + ', your appointment at the clinic has been moved to ' +
-            res.booking.dateLabel + ' at ' + to12h(res.booking.time) +
-            '. Please reply if this time doesn\'t suit you. Thank you.');
+          showNotify(msgMoved(res.booking));
         });
       });
       box.appendChild(chip);
@@ -1167,13 +1166,238 @@
     var b = detail.booking;
     if (!confirm('Cancel ' + b.name + '\'s booking on ' + b.dateLabel + ' at ' + to12h(b.time) + '?')) return;
     runChange('cancelBooking', [], $('act-cancel'), function (r) {
-      showNotify('Hello ' + r.booking.name + ', your appointment at the clinic on ' + r.booking.dateLabel +
-        ' at ' + to12h(r.booking.time) + ' has been cancelled. Please call or message us if you would like ' +
-        'a new time. Thank you.');
+      showNotify(msgCancelled(r.booking));
     });
   });
   $('act-restore').addEventListener('click', function () {
     runChange('restoreBooking', [], $('act-restore'));
+  });
+
+  /* ---------- Settings (admin only) ---------- */
+
+  var WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  var settings = { data: null };
+
+  function openSettings() {
+    show('settings');
+    window.scrollTo(0, 0);
+    $('set-msg').textContent = '';
+    $('set-affected').hidden = true;
+    loadSettings();
+  }
+
+  function loadSettings() {
+    return call('getClinicSettings', state.token, state.deviceId).then(renderSettings).catch(handleError);
+  }
+
+  function renderSettings(s) {
+    settings.data = s;
+    var c = s.current;
+    $('set-clinic').value = c.clinicName;
+
+    var ticks = $('set-days');
+    ticks.textContent = '';
+    WEEK.forEach(function (d) {
+      var label = document.createElement('label');
+      var box = document.createElement('input');
+      box.type = 'checkbox';
+      box.value = d;
+      box.checked = c.workingDays.indexOf(d) !== -1;
+      label.appendChild(box);
+      label.appendChild(document.createTextNode(d));
+      ticks.appendChild(label);
+    });
+    $('set-days-from').min = s.today;
+    $('set-days-from').value = s.today;
+
+    var slot = $('set-slot');
+    slot.textContent = '';
+    [5, 10, 15, 20, 25, 30, 40, 45, 60].forEach(function (m) { slot.appendChild(new Option(m + ' minutes', m)); });
+    slot.value = String(c.slotMinutes);
+    $('set-slot-date').min = s.today;
+    $('set-slot-date').max = s.lastDate;
+    $('set-slot-date').value = s.today;
+
+    $('set-grace').value = c.graceMinutes;
+    $('set-window').value = c.bookingWindowDays;
+    $('set-limit').value = c.maxUpcomingPerMobile;
+    $('set-back').value = c.enteredLateMaxDays;
+
+    var reasons = $('set-reasons');
+    reasons.textContent = '';
+    s.reasons.forEach(function (r) {
+      var li = document.createElement('li');
+      li.className = 'reason-row';
+      li.appendChild(textEl('span', r.reason, r.active ? '' : 'reason-off'));
+      var toggle = textEl('button', r.active ? 'Switch off' : 'Switch on', 'btn small');
+      toggle.type = 'button';
+      toggle.addEventListener('click', function () {
+        toggle.disabled = true;
+        call('setReasonActive', state.token, state.deviceId, r.reason, !r.active)
+          .then(function (res) { setMessage(res.message, true); return loadSettings(); })
+          .catch(function (err) { toggle.disabled = false; settingsError(err); });
+      });
+      li.appendChild(toggle);
+      reasons.appendChild(li);
+    });
+
+    $('set-scheduled-block').hidden = !s.scheduled.length;
+    var sched = $('set-scheduled');
+    sched.textContent = '';
+    s.scheduled.forEach(function (x) { sched.appendChild(textEl('li', 'From ' + x.dateLabel + ': ' + x.text)); });
+  }
+
+  function setMessage(text, good) {
+    $('set-msg').className = good ? 'msg ok' : 'msg';
+    $('set-msg').textContent = text;
+  }
+
+  function settingsError(err) {
+    var message = (err && err.message) || String(err);
+    if (message.indexOf('NOT_LOGGED_IN') !== -1) { handleError(err); return; }
+    setMessage(message, false);
+    window.scrollTo(0, 0);
+  }
+
+  /** What each Save button sends. */
+  function settingChange(key) {
+    if (key === 'clinic_name') return { key: key, value: $('set-clinic').value.trim() };
+    if (key === 'working_days') {
+      var days = Array.prototype.filter.call($('set-days').querySelectorAll('input'), function (b) { return b.checked; })
+        .map(function (b) { return b.value; });
+      return { key: key, value: days, from: $('set-days-from').value };
+    }
+    if (key === 'slot_minutes') {
+      var scope = document.querySelector('input[name="slot-scope"]:checked').value;
+      var date = $('set-slot-date').value;
+      return { key: key, value: Number($('set-slot').value), scope: scope, from: date, date: date };
+    }
+    var input = { grace_minutes: 'set-grace', booking_window_days: 'set-window',
+                  max_upcoming_per_mobile: 'set-limit', entered_late_max_days: 'set-back' }[key];
+    return { key: key, value: Number($(input).value) };
+  }
+
+  /** Saves one setting. If bookings are affected, the server asks first. */
+  function saveSetting(change, button) {
+    button.disabled = true;
+    $('set-affected').hidden = true;
+    return call('changeClinicSetting', state.token, state.deviceId, change)
+      .then(function (r) {
+        if (r.needsConfirm) {
+          var lines = r.affected.map(function (a) { return '• ' + a.name + ', ' + a.dateLabel + ' ' + to12h(a.time); }).join('\n');
+          if (!confirm(r.affected.length + (r.affected.length === 1 ? ' booking is' : ' bookings are') +
+              ' affected:\n' + lines + '\n\nSave anyway? You can move and message these patients next.')) return null;
+          change.confirmed = true;
+          return call('changeClinicSetting', state.token, state.deviceId, change);
+        }
+        return r;
+      })
+      .then(function (r) {
+        if (!r) return;
+        setMessage(r.message + (r.info ? ' ' + r.info : ''), true);
+        showSettingsAffected(r.affected || [], change.key);
+        loadDay();
+        return loadSettings();
+      })
+      .catch(settingsError)
+      .then(function () { button.disabled = false; });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll('.set-save'), function (button) {
+    button.addEventListener('click', function () {
+      saveSetting(settingChange(button.dataset.key), button);
+    });
+  });
+
+  /**
+   * After a slot-length change: each affected booking with its suggested
+   * slot and a Move button, then WhatsApp. After a working-days change:
+   * WhatsApp asking the patient for a new time.
+   */
+  function showSettingsAffected(list, key) {
+    var ul = $('set-affected-list');
+    ul.textContent = '';
+    $('set-affected').hidden = list.length === 0;
+    var movable = list.filter(function (a) { return a.suggested; });
+    $('set-move-all').hidden = movable.length < 2;
+    $('set-affected-note').textContent = key === 'slot_minutes'
+      ? 'These bookings no longer fit the new slots. Move each one to the suggested time, then message the patient.'
+      : 'These bookings are on days the clinic is now closed. Message each patient to pick a new time.';
+    list.forEach(function (a) {
+      var li = document.createElement('li');
+      li.appendChild(textEl('div', a.name + ' · ' + a.id, 'title'));
+      li.appendChild(textEl('div', a.dateLabel + ', ' + to12h(a.time) + ' · ' + (a.mobile ? spacedPhone(a.mobile) : 'no number'), 'muted'));
+      var actions = document.createElement('div');
+      actions.className = 'affected-actions';
+      li.appendChild(actions);
+      if (a.suggested) {
+        li.insertBefore(textEl('div', 'Suggested: ' + to12h(a.suggested), 'muted'), actions);
+        var move = textEl('button', 'Move to ' + to12h(a.suggested), 'btn small primary');
+        move.type = 'button';
+        move.addEventListener('click', function () { moveAffected(a, move, actions); });
+        a.moveButton = move;
+        actions.appendChild(move);
+      } else {
+        if (key === 'slot_minutes') li.insertBefore(textEl('div', 'No free slot left that day. Reschedule by hand.', 'muted'), actions);
+        addMessageButtons(actions, msgNeedsNewTime(a), a.mobile);
+      }
+      ul.appendChild(li);
+    });
+    $('set-move-all').onclick = function () {
+      var queue = movable.filter(function (a) { return !a.moved; });
+      var next = function () {
+        var a = queue.shift();
+        if (!a) return;
+        moveAffected(a, a.moveButton, a.moveButton.parentNode).then(next);
+      };
+      next();
+    };
+  }
+
+  function moveAffected(a, button, actions) {
+    button.disabled = true;
+    return call('rescheduleBooking', state.token, state.deviceId, a.id, { date: a.date, time: a.suggested })
+      .then(function (r) {
+        if (!r.ok) {
+          button.disabled = false;
+          button.textContent = 'Slot taken: reschedule by hand';
+          return;
+        }
+        a.moved = true;
+        actions.textContent = '';
+        actions.appendChild(textEl('span', 'Moved to ' + to12h(r.booking.time) + ' ✓', 'pill arrived'));
+        addMessageButtons(actions, msgMoved(r.booking), r.booking.mobile);
+        loadDay();
+      })
+      .catch(function (err) { button.disabled = false; settingsError(err); });
+  }
+
+  function addMessageButtons(actions, text, mobile) {
+    var link = whatsappLink(mobile, text);
+    if (link) {
+      var wa = textEl('a', 'WhatsApp', 'btn small whatsapp');
+      wa.href = link;
+      wa.target = '_blank';
+      wa.rel = 'noopener';
+      actions.appendChild(wa);
+    }
+    var copy = textEl('button', 'Copy message', 'btn small');
+    copy.type = 'button';
+    copy.addEventListener('click', function () { copyText(text, copy); });
+    actions.appendChild(copy);
+  }
+
+  $('btn-settings').addEventListener('click', openSettings);
+  $('settings-back').addEventListener('click', function () { backToDay(''); });
+  $('set-affected-done').addEventListener('click', function () { $('set-affected').hidden = true; });
+  $('set-add-reason').addEventListener('click', function () {
+    var name = $('set-new-reason').value.trim();
+    if (!name) { setMessage('Type the new visit reason.', false); return; }
+    $('set-add-reason').disabled = true;
+    call('addReason', state.token, state.deviceId, name)
+      .then(function (r) { $('set-new-reason').value = ''; setMessage(r.message, true); loadDay(); return loadSettings(); })
+      .catch(settingsError)
+      .then(function () { $('set-add-reason').disabled = false; });
   });
 
   /* ---------- Edit day ---------- */
@@ -1296,11 +1520,61 @@
 
   /* ---------- Patients to contact (WhatsApp) ---------- */
 
-  function whatsappMessage(a) {
-    // Draft wording: to be confirmed with the clinic (Open questions in the spec).
-    return 'Hello ' + a.name + ', this is a message from the clinic. Your appointment on ' +
-      a.dateLabel + ' at ' + to12h(a.time) + ' needs to be changed because the doctor is not ' +
-      'available at that time. Please reply to this message or call us to choose a new time. Thank you.';
+  /*
+   * WhatsApp messages to patients: English first, then Malayalam, then the
+   * clinic name (from Settings). No reason is given for a change.
+   * b needs: name, date ("2026-11-17"), dateLabel ("Tue 17 Nov"), time ("16:20").
+   */
+  var ML_MONTHS = ['ജനുവരി', 'ഫെബ്രുവരി', 'മാർച്ച്', 'ഏപ്രിൽ', 'മേയ്', 'ജൂൺ', 'ജൂലൈ', 'ഓഗസ്റ്റ്',
+                   'സെപ്റ്റംബർ', 'ഒക്ടോബർ', 'നവംബർ', 'ഡിസംബർ'];
+  var ML_DAYS = ['ഞായർ', 'തിങ്കൾ', 'ചൊവ്വ', 'ബുധൻ', 'വ്യാഴം', 'വെള്ളി', 'ശനി'];
+
+  /** "2026-11-17", "16:20" → "17 നവംബർ (ചൊവ്വ), വൈകുന്നേരം 4:20" */
+  function mlWhen(date, time) {
+    var p = date.split('-').map(Number);
+    var weekday = new Date(Date.UTC(p[0], p[1] - 1, p[2], 12)).getUTCDay();
+    var h = Number(time.split(':')[0]);
+    var part = h < 12 ? 'രാവിലെ' : h < 16 ? 'ഉച്ചയ്ക്ക്' : h < 19 ? 'വൈകുന്നേരം' : 'രാത്രി';
+    var t = to12h(time).replace(/ (am|pm)$/, '');
+    return p[2] + ' ' + ML_MONTHS[p[1] - 1] + ' (' + ML_DAYS[weekday] + '), ' + part + ' ' + t;
+  }
+
+  function enWhen(b) { return b.dateLabel + ' at ' + to12h(b.time); }
+
+  function withSignOff(en, ml) {
+    var clinic = view.data && view.data.clinicName;
+    return en + '\n\n' + ml + (clinic ? '\n\n– ' + clinic : '');
+  }
+
+  /** 1. Moved to a new time. */
+  function msgMoved(b) {
+    return withSignOff(
+      'Hello ' + b.name + ', we\'ve had to move your appointment to ' + enWhen(b) + '. Please let us know if ' +
+      'the new time suits you. If not, just send us a WhatsApp message and we\'ll change it to a time that ' +
+      'works for you. Thank you.',
+      'നമസ്കാരം ' + b.name + ', നിങ്ങളുടെ അപ്പോയിന്റ്മെന്റ് ' + mlWhen(b.date, b.time) + '-ലേക്ക് മാറ്റേണ്ടി വന്നു. ' +
+      'പുതിയ സമയം സൗകര്യപ്രദമാണോ എന്ന് അറിയിക്കുക. അല്ലെങ്കിൽ ഞങ്ങൾക്ക് ഒരു വാട്ട്‌സ്ആപ്പ് സന്ദേശം അയയ്ക്കൂ, ' +
+      'നിങ്ങളുടെ സൗകര്യം അനുസരിച്ച് സമയം മാറ്റിത്തരാം. നന്ദി.');
+  }
+
+  /** 2. Needs a new time (none picked yet). */
+  function msgNeedsNewTime(b) {
+    return withSignOff(
+      'Hello ' + b.name + ', we\'re sorry, we need to change your appointment on ' + enWhen(b) + '. Please send ' +
+      'us a WhatsApp message with a day and time that suits you, and we\'ll book it for you. Thank you.',
+      'നമസ്കാരം ' + b.name + ', ക്ഷമിക്കണം, ' + mlWhen(b.date, b.time) + '-നുള്ള നിങ്ങളുടെ അപ്പോയിന്റ്മെന്റ് ' +
+      'മാറ്റേണ്ടതുണ്ട്. നിങ്ങൾക്ക് സൗകര്യപ്രദമായ ദിവസവും സമയവും അറിയിച്ച് ഞങ്ങൾക്ക് ഒരു വാട്ട്‌സ്ആപ്പ് സന്ദേശം ' +
+      'അയയ്ക്കൂ, ഞങ്ങൾ ബുക്ക് ചെയ്തുതരാം. നന്ദി.');
+  }
+
+  /** 3. Cancelled. */
+  function msgCancelled(b) {
+    return withSignOff(
+      'Hello ' + b.name + ', your appointment on ' + enWhen(b) + ' has been cancelled. If you\'d like a new ' +
+      'time, just send us a WhatsApp message and we\'ll book it for you. Thank you.',
+      'നമസ്കാരം ' + b.name + ', ' + mlWhen(b.date, b.time) + '-നുള്ള നിങ്ങളുടെ അപ്പോയിന്റ്മെന്റ് ' +
+      'റദ്ദാക്കിയിരിക്കുന്നു. പുതിയ സമയം വേണമെങ്കിൽ ഞങ്ങൾക്ക് ഒരു വാട്ട്‌സ്ആപ്പ് സന്ദേശം അയയ്ക്കൂ, ഞങ്ങൾ ' +
+      'ബുക്ക് ചെയ്തുതരാം. നന്ദി.');
   }
 
   /**
@@ -1332,7 +1606,7 @@
     ul.textContent = '';
     $('affected').hidden = list.length === 0;
     list.forEach(function (a) {
-      var text = whatsappMessage(a);
+      var text = msgNeedsNewTime(a);
       var li = document.createElement('li');
       li.appendChild(textEl('div', a.name, 'title'));
       li.appendChild(textEl('div', a.dateLabel + ', ' + to12h(a.time), 'muted'));

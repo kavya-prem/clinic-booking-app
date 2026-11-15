@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Clinic booking">
     <title>Clinic booking</title>
-    <link rel="stylesheet" href="styles.css?v=20261115172210">
+    <link rel="stylesheet" href="styles.css?v=20261115174004">
   </head>
   <body>
     <main class="wrap">
@@ -46,6 +46,7 @@
         <div class="topbar">
           <span class="muted">Logged in as <strong id="who"></strong></span>
           <span class="topbar-actions">
+            <button id="btn-settings" class="btn small" hidden>⚙ Settings</button>
             <button id="btn-devices" class="btn small" hidden>
               Devices <span id="badge" class="badge" hidden></span>
             </button>
@@ -313,6 +314,81 @@
         </div>
       </section>
 
+      <!-- Admin only: clinic-wide settings -->
+      <section id="screen-settings" class="card" hidden>
+        <div class="row-between">
+          <h1>Settings</h1>
+          <button id="settings-back" class="btn link">← Day view</button>
+        </div>
+        <p class="muted">Clinic hours and blocked slots are changed inside each day (Edit day).</p>
+        <p id="set-msg" class="msg ok" role="status"></p>
+
+        <!-- Bookings a change affects: move them and message the patient -->
+        <div id="set-affected" class="affected" hidden>
+          <p class="edit-title">Patients to contact</p>
+          <p id="set-affected-note" class="muted"></p>
+          <button id="set-move-all" class="btn small primary" hidden>Move all to suggested</button>
+          <ul id="set-affected-list" class="list"></ul>
+          <button id="set-affected-done" class="btn small">Done</button>
+        </div>
+
+        <div class="set-block">
+          <p class="edit-title">Clinic name</p>
+          <p class="muted">Shown at the end of WhatsApp messages to patients.</p>
+          <input id="set-clinic" class="text-input" maxlength="60" placeholder="For example: Dr. Prem's Clinic">
+          <button class="btn small set-save" data-key="clinic_name">Save</button>
+        </div>
+
+        <div class="set-block">
+          <p class="edit-title">Working days</p>
+          <div id="set-days" class="day-ticks"></div>
+          <label class="inline-label">From <input id="set-days-from" type="date" class="text-input"></label>
+          <button class="btn small set-save" data-key="working_days">Save</button>
+        </div>
+
+        <div class="set-block">
+          <p class="edit-title">Slot length</p>
+          <select id="set-slot" class="text-input" aria-label="Slot length"></select>
+          <fieldset class="scope">
+            <label><input type="radio" name="slot-scope" value="fromDate" checked> From this date onward</label>
+            <label><input type="radio" name="slot-scope" value="day"> Just this day</label>
+          </fieldset>
+          <label class="inline-label">Date <input id="set-slot-date" type="date" class="text-input"></label>
+          <button class="btn small set-save" data-key="slot_minutes">Save</button>
+        </div>
+
+        <div class="set-block">
+          <p class="edit-title">Other rules</p>
+          <div class="num-row"><label for="set-grace">Grace period before "Late" (minutes)</label>
+            <input id="set-grace" type="number" min="0" max="60" class="text-input num">
+            <button class="btn small set-save" data-key="grace_minutes">Save</button></div>
+          <div class="num-row"><label for="set-window">Booking window (days ahead)</label>
+            <input id="set-window" type="number" min="1" max="60" class="text-input num">
+            <button class="btn small set-save" data-key="booking_window_days">Save</button></div>
+          <div class="num-row"><label for="set-limit">Warn when a number already has this many upcoming bookings</label>
+            <input id="set-limit" type="number" min="1" max="10" class="text-input num">
+            <button class="btn small set-save" data-key="max_upcoming_per_mobile">Save</button></div>
+          <div class="num-row"><label for="set-back">Days back (paper bookings and past days)</label>
+            <input id="set-back" type="number" min="1" max="30" class="text-input num">
+            <button class="btn small set-save" data-key="entered_late_max_days">Save</button></div>
+        </div>
+
+        <div class="set-block">
+          <p class="edit-title">Visit reasons</p>
+          <p class="muted">Switch a reason off instead of renaming it, so old bookings keep their reason.</p>
+          <ul id="set-reasons" class="list"></ul>
+          <div class="phone-row">
+            <input id="set-new-reason" class="text-input" maxlength="40" placeholder="New visit reason">
+            <button id="set-add-reason" class="btn small">Add</button>
+          </div>
+        </div>
+
+        <div class="set-block" id="set-scheduled-block" hidden>
+          <p class="edit-title">Changes starting later</p>
+          <ul id="set-scheduled" class="list"></ul>
+        </div>
+      </section>
+
       <!-- Admin only: approve, reject and remove devices -->
       <section id="screen-devices" class="card" hidden>
         <div class="row-between">
@@ -340,7 +416,7 @@
       </div>
     </main>
 
-    <script src="config.js?v=20261115172210"></script>
-    <script src="app.js?v=20261115172210"></script>
+    <script src="config.js?v=20261115174004"></script>
+    <script src="app.js?v=20261115174004"></script>
   </body>
 </html>

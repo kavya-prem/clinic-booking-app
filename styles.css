@@ -285,6 +285,21 @@
   .btn.needs { background: var(--warn-bg); border-color: #f3d19c; color: #7a4a00; }
   #unresolved-list .affected-actions { margin-top: 8px; }
 
+  /* ---------- Settings ---------- */
+  .set-block { border-top: 1px solid var(--line); padding: 14px 0; }
+  .set-block .btn.small { margin: 10px 0 0; }
+  .day-ticks { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 0 10px; }
+  .day-ticks label { display: flex; gap: 4px; align-items: center; font-weight: 400; margin: 0; }
+  .inline-label { display: block; font-weight: 600; margin-top: 8px; }
+  .inline-label .text-input { display: inline-block; width: auto; margin-left: 6px; }
+  .num-row { display: grid; grid-template-columns: 1fr 72px auto; gap: 8px; align-items: center; margin-top: 10px; }
+  .num-row label { font-weight: 400; margin: 0; }
+  .num-row .text-input.num { margin: 0; padding: 8px; }
+  .num-row .btn.small { margin: 0; }
+  .reason-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .reason-row .btn.small { margin: 0; }
+  .reason-off { color: var(--muted); text-decoration: line-through; }
+
   .pill.booked { background: #e8f0fe; color: var(--primary); }
   .pill.arrived { background: #e3f4e8; color: var(--ok); }
   .pill.extra { background: var(--warn-bg); color: #9a5b00; }
