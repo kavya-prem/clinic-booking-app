@@ -94,6 +94,38 @@
     button.disabled = isBusy;
   }
 
+  /**
+   * The app's own "Are you sure?" box in the middle of the screen (instead of
+   * the browser's). Returns a Promise: true for Yes, false for No.
+   *   ask({ title, text, yes: 'Yes, cancel', no: 'Keep it', danger: true })
+   */
+  var askDone = null;
+  function ask(o) {
+    if (askDone) askDone(false);
+    $('ask-title').textContent = o.title;
+    $('ask-text').textContent = o.text || '';
+    $('ask-text').hidden = !o.text;
+    $('ask-yes').textContent = o.yes || 'Yes';
+    $('ask-no').textContent = o.no || 'Go back';
+    $('ask-yes').className = 'btn primary' + (o.danger ? ' red' : '');
+    $('ask-overlay').hidden = false;
+    $('ask-no').focus();
+    return new Promise(function (resolve) { askDone = resolve; });
+  }
+  function closeAsk(answer) {
+    $('ask-overlay').hidden = true;
+    var done = askDone;
+    askDone = null;
+    if (done) done(answer);
+  }
+  $('ask-yes').addEventListener('click', function () { closeAsk(true); });
+  $('ask-no').addEventListener('click', function () { closeAsk(false); });
+  $('ask-overlay').addEventListener('click', function (e) { if (e.target === $('ask-overlay')) closeAsk(false); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !$('ask-overlay').hidden) closeAsk(false);
+    if (e.key === 'Escape' && !$('cal-sheet').hidden) $('cal-sheet').hidden = true;
+  });
+
   /** Any server error. If the wristband is no longer valid, go back to the PIN screen. */
   function handleError(err) {
     var message = (err && err.message) || String(err);
@@ -244,8 +276,9 @@
 
       if (d.status === 'approved' && !d.isThisDevice) {
         li.appendChild(actionButton('Remove', 'danger-text', function () {
-          if (!confirm('Remove "' + (d.name || d.description) + '"? It will be logged out now.')) return null;
-          return call('removeDevice', state.token, state.deviceId, d.id);
+          return ask({ title: 'Remove "' + (d.name || d.description) + '"?', text: 'It will be logged out now.',
+                       yes: 'Yes, remove', no: 'Keep it', danger: true })
+            .then(function (yes) { return yes ? call('removeDevice', state.token, state.deviceId, d.id) : null; });
         }, 'Removed and logged out.'));
       } else if (d.status === 'rejected' || d.status === 'removed') {
         li.appendChild(actionButton('Approve again', '', function () {
@@ -273,6 +306,7 @@
       if (!p) return;
       b.disabled = true;
       p.then(function (devices) {
+        if (!devices) { b.disabled = false; return; }
         $('devices-msg').textContent = doneMessage;
         renderDevices(devices);
       }).catch(function (err) {
@@ -287,14 +321,17 @@
   $('devices-back').addEventListener('click', function () { openSettings(); });
 
   $('btn-logout-all').addEventListener('click', function () {
-    if (!confirm('Log out every other device? They will need the PIN again.')) return;
+    ask({ title: 'Log out every other device?', text: 'They will need the PIN again.',
+          yes: 'Yes, log out', no: 'Go back', danger: true }).then(function (yes) { if (yes) logoutAll(); });
+  });
+  function logoutAll() {
     var b = $('btn-logout-all');
     b.disabled = true;
     call('logoutAllDevices', state.token, state.deviceId)
       .then(function (r) { $('devices-msg').textContent = 'Logged out ' + r.loggedOut + ' session(s).'; })
       .catch(handleError)
       .then(function () { b.disabled = false; });
-  });
+  }
 
   /* ---------- Day view ---------- */
 
@@ -357,11 +394,9 @@
     $('day-label').textContent = '';
     $('day-label').appendChild(textEl('span', isToday ? 'Today' : isPast ? 'Past' : '\u00a0', 'day-kicker'));
     $('day-label').appendChild(textEl('span', day.label, 'day-main'));
-    $('day-picker').min = data.days[0].date;
-    $('day-picker').max = data.days[data.days.length - 1].date;
-    $('day-picker').value = day.date;
-    $('day-prev').disabled = index === 0;
-    $('day-next').disabled = index === data.days.length - 1;
+    $('clinic-title').textContent = data.clinicName || 'Clinic booking';
+    renderWeek();
+    renderStats(day, isToday, isPast);
     $('day-today').hidden = isToday;
     $('day-extra').hidden = !day.open || isPast;
     $('day-unresolved').hidden = !data.unresolvedCount;
@@ -381,7 +416,7 @@
       $('day-hours').textContent = 'Open ' + day.hours.split(', ').map(function (r) {
         var p = r.split('-');
         return to12h(p[0]) + ' – ' + to12h(p[1]);
-      }).join(', ') + ' · ' + day.slotMinutes + '-min slots';
+      }).join(', ');
     } else {
       $('day-hours').textContent = day.closedReason + (day.note ? ': ' + day.note : '');
     }
@@ -393,6 +428,15 @@
     var noShowAt = {};
     (day.noShows || []).forEach(function (n) { if (n.type === 'regular') noShowAt[n.time] = n; });
     var rowInfo = { isToday: isToday, now: now, grace: day.graceMinutes || 0, noShowAt: noShowAt };
+    var nowShown = !isToday || !day.open;
+    var nowLine = function () {
+      var li = document.createElement('li');
+      li.className = 'now-line';
+      li.setAttribute('aria-label', 'Now');
+      li.appendChild(textEl('span', 'NOW ' + nowInIndia().label.replace(/ (am|pm)$/, '')));
+      li.appendChild(document.createElement('i'));
+      return li;
+    };
     day.rows.forEach(function (row) {
       // A slot that has already started is never offered, even today.
       // The exception: a no-show's slot that is still running can go to a walk-in.
@@ -402,11 +446,13 @@
       var walkInGap = row.kind === 'free' && started && noShowAt[row.time] &&
         toMinutes(row.time) + day.slotMinutes > now;
       if (started && empty && !walkInGap) return;
+      if (!nowShown && toMinutes(row.time) > now) { list.appendChild(nowLine()); nowShown = true; }
       var li = slotRow(row, rowInfo);
       if (row.kind === 'free') makeBookable(li, day.date, row.time, walkInGap ? 'walk-in' : 'phone');
       list.appendChild(li);
       shown++;
     });
+    if (!nowShown && shown > 0) list.appendChild(nowLine());
 
     if (!day.open && shown > 0) {
       list.insertBefore(textEl('li', 'These bookings are on a closed day. They need to be moved.', 'slot-warning'), list.firstChild);
@@ -437,6 +483,7 @@
         line.appendChild(textEl('span', b.status === 'arrived' ? 'Arrived' : 'Booked', 'pill ' + b.status));
         var late = info.isToday && b.status === 'booked' && info.now >= toMinutes(b.time) + info.grace;
         if (late) line.appendChild(textEl('span', 'Late', 'pill late'));
+        if (b.channel === 'online') line.appendChild(textEl('span', 'Online', 'pill online'));
         if (row.kind === 'extra') line.appendChild(textEl('span', 'Extra', 'pill extra'));
         if (row.kind === 'offgrid') line.appendChild(textEl('span', 'Off-grid', 'pill offgrid'));
         body.appendChild(line);
@@ -451,8 +498,151 @@
       });
     }
     li.appendChild(body);
+    // One booking in the slot: a › at the end opens it too.
+    if (row.bookings && row.bookings.length === 1) {
+      var open = textEl('span', '›', 'slot-open');
+      open.setAttribute('aria-hidden', 'true');
+      open.addEventListener('click', function () { openDetail(row.bookings[0].id, 'day'); });
+      li.appendChild(open);
+    }
     return li;
   }
+
+  /** Four small counts above the list: slots, booked, arrived, free. */
+  function renderStats(day, isToday, isPast) {
+    var box = $('day-stats');
+    box.textContent = '';
+    box.hidden = isPast || !day.open;
+    if (box.hidden) return;
+    var now = nowInIndia().minutes;
+    var counts = { slots: 0, booked: 0, arrived: 0, free: 0 };
+    day.rows.forEach(function (r) {
+      if (r.kind !== 'extra' && r.kind !== 'unavailable' && r.kind !== 'offgrid') counts.slots++;
+      if (r.kind === 'free' && !(isToday && toMinutes(r.time) <= now)) counts.free++;
+      (r.bookings || []).forEach(function (b) { counts[b.status === 'arrived' ? 'arrived' : 'booked']++; });
+    });
+    [['slots', 'slots'], ['booked', 'booked'], ['arrived', 'arrived'], ['free', 'free']].forEach(function (k) {
+      var tile = document.createElement('div');
+      tile.className = 'stat ' + k[0];
+      tile.appendChild(textEl('b', String(counts[k[0]])));
+      tile.appendChild(textEl('span', k[1]));
+      box.appendChild(tile);
+    });
+  }
+
+  /* ----- Week strip and calendar ----- */
+
+  var DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
+                'October', 'November', 'December'];
+
+  /** 0 = Monday … 6 = Sunday, for a "2026-11-16" date. */
+  function weekdayIndex(date) {
+    var p = date.split('-').map(Number);
+    return (new Date(Date.UTC(p[0], p[1] - 1, p[2], 12)).getUTCDay() + 6) % 7;
+  }
+  function dayInfo(date) {
+    return view.data.days.filter(function (d) { return d.date === date; })[0];
+  }
+  function hasBookings(d) {
+    return !!d && d.rows.some(function (r) { return r.bookings && r.bookings.length; });
+  }
+  function goToDate(date) {
+    if (!dayInfo(date)) return;
+    view.date = date;
+    renderDay();
+  }
+
+  /**
+   * Monday to Sunday of this week, all in the same format; a dot marks days
+   * with bookings. The 8th block is a dull "+" that opens the calendar; when
+   * a date outside this week is open, it shows that date instead.
+   */
+  function renderWeek() {
+    var data = view.data;
+    var monday = addDaysLocal(data.today, -weekdayIndex(data.today));
+    var nav = $('week');
+    nav.textContent = '';
+    var inWeek = false;
+    for (var i = 0; i < 7; i++) {
+      var date = addDaysLocal(monday, i);
+      var d = dayInfo(date);
+      var on = date === view.date;
+      if (on) inWeek = true;
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'wk' + (on ? ' on' : '') + (date === data.today ? ' today' : '') + (hasBookings(d) ? ' has' : '');
+      b.disabled = !d;
+      b.setAttribute('aria-label', shortDate(date) + (date === data.today ? ', today' : ''));
+      if (on) b.setAttribute('aria-current', 'date');
+      b.appendChild(textEl('span', DOW[i], 'wk-dow'));
+      b.appendChild(textEl('span', String(Number(date.slice(8))), 'wk-num'));
+      b.appendChild(textEl('span', '', 'wk-dot'));
+      b.addEventListener('click', goToDate.bind(null, date));
+      nav.appendChild(b);
+    }
+    var plus = document.createElement('button');
+    plus.type = 'button';
+    plus.className = 'wk plus' + (inWeek ? '' : ' on');
+    plus.setAttribute('aria-label', inWeek ? 'Pick another date' : shortDate(view.date) + ', pick another date');
+    if (inWeek) {
+      plus.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>';
+    } else {
+      plus.appendChild(textEl('span', DOW[weekdayIndex(view.date)], 'wk-dow'));
+      plus.appendChild(textEl('span', String(Number(view.date.slice(8))), 'wk-num'));
+      plus.appendChild(textEl('span', '', 'wk-dot'));
+    }
+    plus.addEventListener('click', function () { openCalendar(view.date.slice(0, 7)); });
+    nav.appendChild(plus);
+  }
+
+  var cal = { month: null };   // "2026-11"
+
+  function openCalendar(month) {
+    cal.month = month;
+    renderCalendar();
+    $('cal-sheet').hidden = false;
+  }
+
+  function renderCalendar() {
+    var data = view.data;
+    var first = data.days[0].date.slice(0, 7);
+    var last = data.days[data.days.length - 1].date.slice(0, 7);
+    var p = cal.month.split('-').map(Number);
+    $('cal-title').textContent = MONTHS[p[1] - 1] + ' ' + p[0];
+    $('cal-prev').disabled = cal.month <= first;
+    $('cal-next').disabled = cal.month >= last;
+    var grid = $('cal-grid');
+    grid.textContent = '';
+    var start = cal.month + '-01';
+    for (var b = 0; b < weekdayIndex(start); b++) grid.appendChild(textEl('span', '', 'cal-blank'));
+    var daysInMonth = new Date(Date.UTC(p[0], p[1], 0)).getUTCDate();
+    for (var n = 1; n <= daysInMonth; n++) {
+      var date = cal.month + '-' + ('0' + n).slice(-2);
+      var d = dayInfo(date);
+      var button = textEl('button', String(n), 'cal-day' + (date === data.today ? ' today' : '') +
+        (d && d.past ? ' past' : '') + (date === view.date ? ' on' : ''));
+      button.type = 'button';
+      button.disabled = !d;
+      button.setAttribute('aria-label', shortDate(date));
+      button.addEventListener('click', function (picked) {
+        $('cal-sheet').hidden = true;
+        goToDate(picked);
+      }.bind(null, date));
+      grid.appendChild(button);
+    }
+  }
+
+  function shiftMonth(step) {
+    var p = cal.month.split('-').map(Number);
+    var d = new Date(Date.UTC(p[0], p[1] - 1 + step, 1));
+    cal.month = d.toISOString().slice(0, 7);
+    renderCalendar();
+  }
+  $('cal-prev').addEventListener('click', function () { shiftMonth(-1); });
+  $('cal-next').addEventListener('click', function () { shiftMonth(1); });
+  $('cal-close').addEventListener('click', function () { $('cal-sheet').hidden = true; });
+  $('cal-sheet').addEventListener('click', function (e) { if (e.target === $('cal-sheet')) $('cal-sheet').hidden = true; });
 
   /**
    * An earlier day: view only. Every booking with its status (including
@@ -485,8 +675,13 @@
       line.appendChild(textEl('span', statusLabel(b.status), 'pill ' + b.status));
       if (b.status === 'booked') line.appendChild(textEl('span', 'Needs status', 'pill late'));
       if (b.type === 'extra') line.appendChild(textEl('span', 'Extra', 'pill extra'));
+      if (b.channel === 'online') line.appendChild(textEl('span', 'Online', 'pill online'));
       body.appendChild(line);
       li.appendChild(body);
+      var open = textEl('span', '›', 'slot-open');
+      open.setAttribute('aria-hidden', 'true');
+      open.addEventListener('click', function () { openDetail(b.id, 'day'); });
+      li.appendChild(open);
       list.appendChild(li);
     });
   }
@@ -497,7 +692,15 @@
     button.type = 'button';
     button.addEventListener('click', function (e) {
       e.stopPropagation();
-      if (status === 'no-show' && !confirm('Mark ' + b.name + ' as No-show?')) return;
+      if (status === 'no-show') {
+        ask({ title: 'Mark ' + b.name + ' as No-show?', text: to12h(b.time) + '. Their slot becomes free.',
+              yes: 'Yes, no-show', no: 'Go back', danger: true })
+          .then(function (yes) { if (yes) send(); });
+        return;
+      }
+      send();
+    });
+    function send() {
       button.disabled = true;
       call('setBookingStatus', state.token, state.deviceId, b.id, status)
         .then(function (r) {
@@ -505,28 +708,11 @@
           return loadDay();
         })
         .catch(function (err) { button.disabled = false; handleError(err); });
-    });
+    }
     return button;
   }
 
-  function moveDay(step) {
-    var dates = view.data.days.map(function (d) { return d.date; });
-    var i = dates.indexOf(view.date) + step;
-    if (i >= 0 && i < dates.length) {
-      view.date = dates[i];
-      renderDay();
-    }
-  }
-
-  $('day-prev').addEventListener('click', function () { moveDay(-1); });
-  $('day-next').addEventListener('click', function () { moveDay(1); });
   $('day-today').addEventListener('click', function () { view.date = view.data.today; renderDay(); });
-  $('day-picker').addEventListener('change', function () {
-    var picked = $('day-picker').value;
-    var known = view.data.days.some(function (d) { return d.date === picked; });
-    view.date = known ? picked : view.data.today;
-    renderDay();
-  });
 
   /* ---------- New booking ---------- */
 
@@ -560,7 +746,7 @@
     var day = view.data.days.filter(function (d) { return d.date === date; })[0];
     booking.draft = { date: date, time: time, mode: mode };
     booking.conflict = '';
-    $('book-title').textContent = mode === 'extra' ? 'Extra booking' : mode === 'paper' ? 'Paper booking'
+    $('book-title').textContent = mode === 'extra' ? 'Extra booking' : mode === 'paper' ? 'Written booking'
       : channel === 'walk-in' ? 'Walk-in' : 'New booking';
     $('book-slot').textContent = (day ? day.label : date) + ', ' + to12h(time);
     $('book-slot').hidden = mode === 'paper';
@@ -570,7 +756,7 @@
     $('book-mode-note').hidden = mode === 'regular';
     $('book-mode-note').textContent = mode === 'extra'
       ? 'For urgent patients, outside the normal slots. Any time from 6 am to 11 pm.'
-      : mode === 'paper' ? 'For bookings written on paper while the app was down (up to 7 days back).' : '';
+      : mode === 'paper' ? 'For bookings written in the register while the app was down (up to 7 days back).' : '';
     if (mode !== 'regular') {
       fillTimes5($('book-time'), time);
       if (mode === 'paper') {
@@ -676,7 +862,7 @@
     var dl = $('confirm-details');
     dl.textContent = '';
     var rows = [['Patient', b.name], ['When', b.dateLabel + ', ' + to12h(b.time) + (b.slotType === 'extra' ? ' (extra)' : '')],
-     ['Reason', b.reason || '–'], ['How', b.channel === 'walk-in' ? 'Walk-in' : 'Phone call'], ['Comments', b.comments || '–']];
+     ['Reason', b.reason || '–'], ['How', channelLabel(b.channel)], ['Comments', b.comments || '–']];
     if (b.mode === 'paper') {
       rows.splice(2, 0, ['Status', b.status === 'booked' ? 'Booked (visit not yet happened)' : statusLabel(b.status) + ' (from paper)']);
     }
@@ -914,6 +1100,7 @@
       li.setAttribute('role', 'button');
       var title = textEl('div', b.name, 'title');
       title.appendChild(textEl('span', statusLabel(b.status), 'pill ' + b.status));
+      if (b.channel === 'online') title.appendChild(textEl('span', 'Online', 'pill online'));
       li.appendChild(title);
       li.appendChild(textEl('div', b.dateLabel + ', ' + to12h(b.time) + ' · ' + (b.mobile || 'no number') + ' · ' + b.id, 'when'));
       li.addEventListener('click', function () { openDetail(b.id, 'search', b); });
@@ -924,6 +1111,9 @@
 
   function statusLabel(status) {
     return { booked: 'Booked', arrived: 'Arrived', cancelled: 'Cancelled', 'no-show': 'No-show' }[status] || status;
+  }
+  function channelLabel(channel) {
+    return { 'walk-in': 'Walk-in', online: 'Online by patient' }[channel] || 'Phone call';
   }
 
   $('day-search').addEventListener('click', openSearch);
@@ -943,25 +1133,38 @@
     window.scrollTo(0, 0);
     if (known) { renderDetail(known); return; }
     $('detail-info').textContent = '';
-    $('detail-title').textContent = id;
+    $('detail-name').textContent = '';
+    $('detail-when').textContent = '';
+    $('detail-pills').textContent = '';
+    $('detail-mobile').textContent = '';
+    $('detail-wa').hidden = true;
+    $('detail-title').textContent = 'Booking ' + id;
     call('getBooking', state.token, state.deviceId, id).then(renderDetail).catch(handleError);
   }
 
   function renderDetail(b) {
     detail.booking = b;
-    $('detail-title').textContent = b.id;
+    $('detail-title').textContent = 'Booking ' + b.id;
+    $('detail-name').textContent = b.name;
+    $('detail-when').textContent = b.dateLabel + ' · ' + to12h(b.time);
+    var pills = $('detail-pills');
+    pills.textContent = '';
+    pills.appendChild(textEl('span', statusLabel(b.status), 'pill ' + b.status));
+    if (b.channel === 'online') pills.appendChild(textEl('span', 'Online', 'pill online'));
+    if (b.type === 'extra') pills.appendChild(textEl('span', 'Extra', 'pill extra'));
+    $('detail-mobile').textContent = b.mobile ? spacedPhone(b.mobile) : 'Not recorded';
+    var chat = whatsappLink(b.mobile);
+    $('detail-wa').hidden = !chat;
+    if (chat) $('detail-wa').href = chat;
     var dl = $('detail-info');
     dl.textContent = '';
-    var statusDd;
-    [['Patient', b.name], ['Mobile', b.mobile ? spacedPhone(b.mobile) : 'Not recorded'],
-     ['When', b.dateLabel + ', ' + to12h(b.time) + (b.type === 'extra' ? ' (extra)' : '')],
-     ['Status', ''], ['Reason', b.reason || '–'], ['Comments', b.comments || '–'],
-     ['Booked', (b.channel === 'walk-in' ? 'Walk-in' : 'Phone') + ', ' + b.createdAt + ' by ' + b.createdBy]]
+    var at = b.createdAt ? ' · ' + b.createdAt : '';
+    var by = b.channel === 'online' ? 'Online by patient' + at
+      : channelLabel(b.channel) + at + (b.createdBy ? ' by ' + b.createdBy : '');
+    [['Reason', b.reason || '–'], ['Comments', b.comments || '–'], ['Booked', by]]
       .forEach(function (pair) {
         dl.appendChild(textEl('dt', pair[0]));
-        var dd = textEl('dd', pair[1]);
-        if (pair[0] === 'Status') { statusDd = dd; dd.appendChild(textEl('span', statusLabel(b.status), 'pill ' + b.status)); }
-        dl.appendChild(dd);
+        dl.appendChild(textEl('dd', pair[1]));
       });
 
     var past = b.date < view.data.today;
@@ -1000,8 +1203,9 @@
         (st === 'arrived' ? ' arrive' : st === 'no-show' ? ' noshow' : ''));
       button.type = 'button';
       button.addEventListener('click', function () {
-        if (!confirm('Change ' + b.name + ' from ' + statusLabel(b.status) + ' to ' + statusLabel(st) + '?')) return;
-        runChange('setBookingStatus', [st], button);
+        ask({ title: 'Change ' + b.name + ' to ' + statusLabel(st) + '?',
+              text: 'It is ' + statusLabel(b.status) + ' now.', yes: 'Yes, change', no: 'Go back' })
+          .then(function (yes) { if (yes) runChange('setBookingStatus', [st], button); });
       });
       box.appendChild(button);
     });
@@ -1036,13 +1240,12 @@
       .then(function () { button.disabled = false; });
   }
 
-  /** WhatsApp and Copy buttons with a ready message for the patient. */
-  function showNotify(text) {
-    var link = whatsappLink(detail.booking.mobile, text);
+  /** "Let the patient know": a WhatsApp button that opens an empty chat with them. */
+  function showNotify() {
+    var link = whatsappLink(detail.booking.mobile);
     $('notify-wa').hidden = !link;
     if (link) $('notify-wa').href = link;
-    $('notify-copy').onclick = function () { copyText(text, $('notify-copy')); };
-    $('detail-notify').hidden = false;
+    $('detail-notify').hidden = !link;
   }
 
   $('detail-back').addEventListener('click', function () {
@@ -1148,10 +1351,13 @@
       chip.type = 'button';
       chip.addEventListener('click', function () {
         var label = day.label + ' at ' + to12h(r.time);
-        if (!confirm('Move ' + detail.booking.name + ' to ' + label + '?')) return;
-        runChange('rescheduleBooking', [{ date: date, time: r.time }], chip, function (res) {
-          showNotify(msgMoved(res.booking));
-        });
+        ask({ title: 'Move ' + detail.booking.name + '?', text: 'To ' + label + '.', yes: 'Yes, move', no: 'Go back' })
+          .then(function (yes) {
+            if (!yes) return;
+            runChange('rescheduleBooking', [{ date: date, time: r.time }], chip, function (res) {
+              showNotify();
+            });
+          });
       });
       box.appendChild(chip);
     });
@@ -1160,10 +1366,14 @@
   // ----- Cancel and undo cancel -----
   $('act-cancel').addEventListener('click', function () {
     var b = detail.booking;
-    if (!confirm('Cancel ' + b.name + '\'s booking on ' + b.dateLabel + ' at ' + to12h(b.time) + '?')) return;
-    runChange('cancelBooking', [], $('act-cancel'), function (r) {
-      showNotify(msgCancelled(r.booking));
-    });
+    ask({ title: 'Cancel ' + b.name + '\'s booking?', text: b.dateLabel + ' at ' + to12h(b.time) + '. The slot becomes free again.',
+          yes: 'Yes, cancel', no: 'Keep it', danger: true })
+      .then(function (yes) {
+        if (!yes) return;
+        runChange('cancelBooking', [], $('act-cancel'), function (r) {
+          showNotify();
+        });
+      });
   });
   $('act-restore').addEventListener('click', function () {
     runChange('restoreBooking', [], $('act-restore'));
@@ -1190,6 +1400,11 @@
     settings.data = s;
     var c = s.current;
     $('set-clinic').value = c.clinicName;
+    var wa = String(c.clinicWhatsapp || '').match(/^\+(\d+) (\d+)$/);
+    var waKnown = fillCountrySelect($('set-wa-cc'), wa ? wa[1] : '91');
+    $('set-wa-cc-other').hidden = waKnown;
+    $('set-wa-cc-other').value = waKnown ? '' : (wa ? wa[1] : '');
+    $('set-wa').value = wa ? wa[2] : '';
 
     var ticks = $('set-days');
     ticks.textContent = '';
@@ -1239,12 +1454,15 @@
       var remove = textEl('button', 'Remove', 'btn small danger-text');
       remove.type = 'button';
       remove.addEventListener('click', function () {
-        if (!confirm('Remove "' + r.reason + '" from the list? Bookings that already have it keep it.')) return;
+        ask({ title: 'Remove "' + r.reason + '"?', text: 'Bookings that already have it keep it.',
+              yes: 'Yes, remove', no: 'Keep it', danger: true }).then(function (yes) { if (yes) removeIt(); });
+      });
+      function removeIt() {
         remove.disabled = true;
         call('removeReason', state.token, state.deviceId, r.reason)
           .then(function (res) { setMessage(res.message, true); loadDay(); return loadSettings(); })
           .catch(function (err) { remove.disabled = false; settingsError(err); });
-      });
+      }
       buttons.appendChild(toggle);
       buttons.appendChild(remove);
       li.appendChild(buttons);
@@ -1272,6 +1490,11 @@
   /** What each Save button sends. */
   function settingChange(key) {
     if (key === 'clinic_name') return { key: key, value: $('set-clinic').value.trim() };
+    if (key === 'clinic_whatsapp') {
+      return { key: key, value: {
+        countryCode: $('set-wa-cc').value === 'other' ? $('set-wa-cc-other').value.replace(/\D/g, '') : $('set-wa-cc').value,
+        mobile: $('set-wa').value.trim() } };
+    }
     if (key === 'working_days') {
       var days = Array.prototype.filter.call($('set-days').querySelectorAll('input'), function (b) { return b.checked; })
         .map(function (b) { return b.value; });
@@ -1294,11 +1517,11 @@
     return call('changeClinicSetting', state.token, state.deviceId, change)
       .then(function (r) {
         if (r.needsConfirm) {
-          var lines = r.affected.map(function (a) { return '• ' + a.name + ', ' + a.dateLabel + ' ' + to12h(a.time); }).join('\n');
-          if (!confirm(r.affected.length + (r.affected.length === 1 ? ' booking is' : ' bookings are') +
-              ' affected:\n' + lines + '\n\nSave anyway? You can move and message these patients next.')) return null;
-          change.confirmed = true;
-          return call('changeClinicSetting', state.token, state.deviceId, change);
+          return askAffected(r.affected, 'You can move and message these patients next.').then(function (yes) {
+            if (!yes) return null;
+            change.confirmed = true;
+            return call('changeClinicSetting', state.token, state.deviceId, change);
+          });
         }
         return r;
       })
@@ -1349,7 +1572,7 @@
         actions.appendChild(move);
       } else {
         if (key === 'slot_minutes') li.insertBefore(textEl('div', 'No free slot left that day. Reschedule by hand.', 'muted'), actions);
-        addMessageButtons(actions, msgNeedsNewTime(a), a.mobile);
+        addWhatsapp(actions, a.mobile);
       }
       ul.appendChild(li);
     });
@@ -1376,14 +1599,15 @@
         a.moved = true;
         actions.textContent = '';
         actions.appendChild(textEl('span', 'Moved to ' + to12h(r.booking.time) + ' ✓', 'pill arrived'));
-        addMessageButtons(actions, msgMoved(r.booking), r.booking.mobile);
+        addWhatsapp(actions, r.booking.mobile);
         loadDay();
       })
       .catch(function (err) { button.disabled = false; settingsError(err); });
   }
 
-  function addMessageButtons(actions, text, mobile) {
-    var link = whatsappLink(mobile, text);
+  /** A WhatsApp button (empty chat) for one patient. */
+  function addWhatsapp(actions, mobile) {
+    var link = whatsappLink(mobile);
     if (link) {
       var wa = textEl('a', 'WhatsApp', 'btn small whatsapp');
       wa.href = link;
@@ -1391,12 +1615,18 @@
       wa.rel = 'noopener';
       actions.appendChild(wa);
     }
-    var copy = textEl('button', 'Copy message', 'btn small');
-    copy.type = 'button';
-    copy.addEventListener('click', function () { copyText(text, copy); });
-    actions.appendChild(copy);
   }
 
+  /** "These bookings are affected. Save anyway?" in our own box. */
+  function askAffected(affected, after) {
+    var lines = affected.map(function (a) { return '• ' + a.name + ', ' + a.dateLabel + ' ' + to12h(a.time); }).join('\n');
+    return ask({ title: affected.length + (affected.length === 1 ? ' booking is' : ' bookings are') + ' affected. Save anyway?',
+                 text: lines + '\n\n' + after, yes: 'Yes, save', no: 'Go back' });
+  }
+
+  $('set-wa-cc').addEventListener('change', function () {
+    $('set-wa-cc-other').hidden = $('set-wa-cc').value !== 'other';
+  });
   $('btn-settings').addEventListener('click', openSettings);
   $('settings-back').addEventListener('click', function () { backToDay(''); });
   $('set-affected-done').addEventListener('click', function () { $('set-affected').hidden = true; });
@@ -1527,14 +1757,11 @@
     return call('changeDayAvailability', state.token, state.deviceId, change)
       .then(function (r) {
         if (r.needsConfirm) {
-          var lines = r.affected.map(function (a) {
-            return '• ' + a.name + ', ' + a.dateLabel + ' ' + to12h(a.time);
-          }).join('\n');
-          var question = r.affected.length + (r.affected.length === 1 ? ' booking is' : ' bookings are') +
-            ' affected:\n' + lines + '\n\nSave anyway? You can message these patients next.';
-          if (!confirm(question)) return null;
-          change.confirmed = true;
-          return call('changeDayAvailability', state.token, state.deviceId, change);
+          return askAffected(r.affected, 'You can message these patients next.').then(function (yes) {
+            if (!yes) return null;
+            change.confirmed = true;
+            return call('changeDayAvailability', state.token, state.deviceId, change);
+          });
         }
         return r;
       })
@@ -1551,85 +1778,18 @@
 
   /* ---------- Patients to contact (WhatsApp) ---------- */
 
-  /*
-   * WhatsApp messages to patients: English first, then Malayalam, then the
-   * clinic name (from Settings). No reason is given for a change.
-   * b needs: name, date ("2026-11-17"), dateLabel ("Tue 17 Nov"), time ("16:20").
-   */
-  var ML_MONTHS = ['ജനുവരി', 'ഫെബ്രുവരി', 'മാർച്ച്', 'ഏപ്രിൽ', 'മേയ്', 'ജൂൺ', 'ജൂലൈ', 'ഓഗസ്റ്റ്',
-                   'സെപ്റ്റംബർ', 'ഒക്ടോബർ', 'നവംബർ', 'ഡിസംബർ'];
-  var ML_DAYS = ['ഞായർ', 'തിങ്കൾ', 'ചൊവ്വ', 'ബുധൻ', 'വ്യാഴം', 'വെള്ളി', 'ശനി'];
-
-  /** "2026-11-17", "16:20" → "17 നവംബർ (ചൊവ്വ), വൈകുന്നേരം 4:20" */
-  function mlWhen(date, time) {
-    var p = date.split('-').map(Number);
-    var weekday = new Date(Date.UTC(p[0], p[1] - 1, p[2], 12)).getUTCDay();
-    var h = Number(time.split(':')[0]);
-    var part = h < 12 ? 'രാവിലെ' : h < 16 ? 'ഉച്ചയ്ക്ക്' : h < 19 ? 'വൈകുന്നേരം' : 'രാത്രി';
-    var t = to12h(time).replace(/ (am|pm)$/, '');
-    return p[2] + ' ' + ML_MONTHS[p[1] - 1] + ' (' + ML_DAYS[weekday] + '), ' + part + ' ' + t;
-  }
-
-  function enWhen(b) { return b.dateLabel + ' at ' + to12h(b.time); }
-
-  function withSignOff(en, ml) {
-    var clinic = view.data && view.data.clinicName;
-    return en + '\n\n' + ml + (clinic ? '\n\n– ' + clinic : '');
-  }
-
-  /** 1. Moved to a new time. */
-  function msgMoved(b) {
-    return withSignOff(
-      'Hello ' + b.name + ', we\'ve had to move your appointment to ' + enWhen(b) + '. Please let us know if ' +
-      'the new time suits you. If not, just send us a WhatsApp message and we\'ll change it to a time that ' +
-      'works for you. Thank you.',
-      'നമസ്കാരം ' + b.name + ', നിങ്ങളുടെ അപ്പോയിന്റ്മെന്റ് ' + mlWhen(b.date, b.time) + '-ലേക്ക് മാറ്റേണ്ടി വന്നു. ' +
-      'പുതിയ സമയം സൗകര്യപ്രദമാണോ എന്ന് അറിയിക്കുക. അല്ലെങ്കിൽ ഞങ്ങൾക്ക് ഒരു വാട്ട്‌സ്ആപ്പ് സന്ദേശം അയയ്ക്കൂ, ' +
-      'നിങ്ങളുടെ സൗകര്യം അനുസരിച്ച് സമയം മാറ്റിത്തരാം. നന്ദി.');
-  }
-
-  /** 2. Needs a new time (none picked yet). */
-  function msgNeedsNewTime(b) {
-    return withSignOff(
-      'Hello ' + b.name + ', we\'re sorry, we need to change your appointment on ' + enWhen(b) + '. Please send ' +
-      'us a WhatsApp message with a day and time that suits you, and we\'ll book it for you. Thank you.',
-      'നമസ്കാരം ' + b.name + ', ക്ഷമിക്കണം, ' + mlWhen(b.date, b.time) + '-നുള്ള നിങ്ങളുടെ അപ്പോയിന്റ്മെന്റ് ' +
-      'മാറ്റേണ്ടതുണ്ട്. നിങ്ങൾക്ക് സൗകര്യപ്രദമായ ദിവസവും സമയവും അറിയിച്ച് ഞങ്ങൾക്ക് ഒരു വാട്ട്‌സ്ആപ്പ് സന്ദേശം ' +
-      'അയയ്ക്കൂ, ഞങ്ങൾ ബുക്ക് ചെയ്തുതരാം. നന്ദി.');
-  }
-
-  /** 3. Cancelled. */
-  function msgCancelled(b) {
-    return withSignOff(
-      'Hello ' + b.name + ', your appointment on ' + enWhen(b) + ' has been cancelled. If you\'d like a new ' +
-      'time, just send us a WhatsApp message and we\'ll book it for you. Thank you.',
-      'നമസ്കാരം ' + b.name + ', ' + mlWhen(b.date, b.time) + '-നുള്ള നിങ്ങളുടെ അപ്പോയിന്റ്മെന്റ് ' +
-      'റദ്ദാക്കിയിരിക്കുന്നു. പുതിയ സമയം വേണമെങ്കിൽ ഞങ്ങൾക്ക് ഒരു വാട്ട്‌സ്ആപ്പ് സന്ദേശം അയയ്ക്കൂ, ഞങ്ങൾ ' +
-      'ബുക്ക് ചെയ്തുതരാം. നന്ദി.');
-  }
-
   /**
+   * Opens an empty WhatsApp chat with that number (decided Nov 2026: no
+   * pre-typed message; the receptionist types it).
    * wa.me needs the number with its country code, digits only.
    * "+971 501234567" → 971501234567. Older 10-digit numbers are Indian (91).
    */
-  function whatsappLink(mobile, text) {
+  function whatsappLink(mobile) {
     var s = String(mobile || '').trim();
     var digits = s.replace(/\D/g, '');
     if (s.charAt(0) !== '+' && digits.length === 10) digits = '91' + digits;
     if (!/^\d{8,15}$/.test(digits)) return null;
-    return 'https://wa.me/' + digits + '?text=' + encodeURIComponent(text);
-  }
-
-  function copyText(text, button) {
-    var done = function () {
-      button.textContent = 'Copied ✓';
-      setTimeout(function () { button.textContent = 'Copy message'; }, 2000);
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(done, function () { prompt('Copy this message:', text); });
-    } else {
-      prompt('Copy this message:', text);
-    }
+    return 'https://wa.me/' + digits;
   }
 
   function showAffected(list) {
@@ -1637,14 +1797,13 @@
     ul.textContent = '';
     $('affected').hidden = list.length === 0;
     list.forEach(function (a) {
-      var text = msgNeedsNewTime(a);
       var li = document.createElement('li');
       li.appendChild(textEl('div', a.name, 'title'));
       li.appendChild(textEl('div', a.dateLabel + ', ' + to12h(a.time), 'muted'));
       li.appendChild(textEl('div', 'Mobile: ' + (a.mobile || 'not recorded'), 'muted'));
       var actions = document.createElement('div');
       actions.className = 'affected-actions';
-      var link = whatsappLink(a.mobile, text);
+      var link = whatsappLink(a.mobile);
       if (link) {
         var wa = textEl('a', 'WhatsApp', 'btn small whatsapp');
         wa.href = link;
@@ -1652,10 +1811,6 @@
         wa.rel = 'noopener';
         actions.appendChild(wa);
       }
-      var copy = textEl('button', 'Copy message', 'btn small');
-      copy.type = 'button';
-      copy.addEventListener('click', function () { copyText(text, copy); });
-      actions.appendChild(copy);
       li.appendChild(actions);
       ul.appendChild(li);
     });
@@ -1694,12 +1849,14 @@
     saveChange({ action: 'reopen', scope: 'day' }, $('edit-reopen'));
   });
   $('edit-undo').addEventListener('click', function () {
-    if (!confirm('Undo this "from now on" change? Every day from this date goes back to how it was before.')) return;
-    saveChange({ action: 'undoFromNow', scope: 'day' }, $('edit-undo'));
+    ask({ title: 'Undo this "from now on" change?', text: 'Every day from this date goes back to how it was before.',
+          yes: 'Yes, undo', no: 'Go back' })
+      .then(function (yes) { if (yes) saveChange({ action: 'undoFromNow', scope: 'day' }, $('edit-undo')); });
   });
   $('edit-reset').addEventListener('click', function () {
-    if (!confirm('Undo the changes made to this day only, and go back to the clinic\'s normal slots?')) return;
-    saveChange({ action: 'reset', scope: 'day' }, $('edit-reset'));
+    ask({ title: 'Reset this day to normal?', text: 'The changes made to this day only are undone, and it goes back to the clinic\'s normal slots.',
+          yes: 'Yes, reset', no: 'Go back' })
+      .then(function (yes) { if (yes) saveChange({ action: 'reset', scope: 'day' }, $('edit-reset')); });
   });
 
   // Keep every device up to date: every 60 seconds, and when the app is
