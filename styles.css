@@ -138,7 +138,9 @@
     background: #fff; color: var(--text); cursor: pointer; padding: 0;
   }
   .icon-btn:disabled { opacity: 0.35; cursor: default; }
-  .icon-btn.on-teal { border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.12); color: #fff; }
+  /* Every button on the teal header looks the same: soft white glass, 40px tall. */
+  .icon-btn.on-teal { width: 40px; height: 40px; border-color: rgba(255,255,255,0.22); background: rgba(255,255,255,0.14); color: #fff; }
+  .icon-btn.on-teal:hover, .head-btn:hover { background: rgba(255,255,255,0.22); }
   .badge.on-icon { position: absolute; top: -6px; right: -6px; margin: 0; min-width: 20px; padding: 1px 6px; font-size: 12px; }
   .screen-head {
     display: flex; align-items: center; gap: 10px;
@@ -148,32 +150,33 @@
   .screen-head h1 { margin: 0; font-size: 18px; }
 
   /* ---------- Day view ---------- */
-  .app-head { background: var(--primary); color: #fff; padding: 16px 16px 14px; }
+  .app-head { background: var(--primary); color: #fff; padding: 16px 16px 18px; }
   .app-head-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .app-head-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .clinic-title { font-family: var(--heading); font-weight: 700; font-size: 17px; }
-  .who { font-size: 12px; opacity: 0.85; }
+  .clinic-title { font-family: var(--heading); font-weight: 700; font-size: 17px; line-height: 1.2;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .who { font-size: 12px; opacity: 0.8; }
   .app-head-icons { display: flex; gap: 8px; }
   .day-head {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: center;
-    gap: 8px;
-    margin-top: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 12px;
+    margin-top: 18px;
   }
+  /* As wide as the three icons above it (3 × 40 + 2 × 8 gaps = 136px). */
   .head-btn {
-    height: 44px; padding: 0 10px;
-    display: inline-flex; align-items: center; gap: 6px;
-    border: none; border-radius: 10px; background: #fff; color: var(--primary);
-    font: 600 13px Inter, system-ui, sans-serif; line-height: 1.15; text-align: left; cursor: pointer;
+    width: 136px; height: 40px; padding: 0 6px; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    border: 1px solid rgba(255,255,255,0.22); border-radius: 12px;
+    background: rgba(255,255,255,0.14); color: #fff;
+    font: 600 12px Inter, system-ui, sans-serif; white-space: nowrap; cursor: pointer;
   }
   .head-btn svg { flex-shrink: 0; }
-  .head-btn.icon-only { width: 44px; padding: 0; justify-content: center; }
-  .day-head #day-search { justify-self: start; }
-  .day-head #day-paper { justify-self: end; }
-  .day-label { text-align: center; }
-  .day-kicker { display: block; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; opacity: 0.85; }
-  .day-main { display: block; white-space: nowrap; font-family: var(--heading); font-weight: 700; font-size: 19px; }
+  .day-label { text-align: left; min-width: 0; }
+  .day-kicker { display: block; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; opacity: 0.8; margin-bottom: 2px; }
+  .day-main { display: block; white-space: nowrap; font-family: var(--heading); font-weight: 700; font-size: 22px; line-height: 1.1; }
+  @media (max-width: 340px) { .day-main { font-size: 19px; } }
 
   .week {
     display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px;
