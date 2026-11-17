@@ -168,6 +168,7 @@
     font: 600 13px Inter, system-ui, sans-serif; line-height: 1.15; text-align: left; cursor: pointer;
   }
   .head-btn svg { flex-shrink: 0; }
+  .head-btn.icon-only { width: 44px; padding: 0; justify-content: center; }
   .day-head #day-search { justify-self: start; }
   .day-head #day-paper { justify-self: end; }
   .day-label { text-align: center; }
