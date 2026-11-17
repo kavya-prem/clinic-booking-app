@@ -523,7 +523,7 @@
     });
     [['slots', 'slots'], ['booked', 'booked'], ['arrived', 'arrived'], ['free', 'free']].forEach(function (k) {
       var tile = document.createElement('div');
-      tile.className = 'stat ' + k[0];
+      tile.className = 'stat stat-' + k[0];
       tile.appendChild(textEl('b', String(counts[k[0]])));
       tile.appendChild(textEl('span', k[1]));
       box.appendChild(tile);
